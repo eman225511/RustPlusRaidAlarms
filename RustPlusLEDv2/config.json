@@ -1,0 +1,19 @@
+{
+    "led_type": "wled",
+    "action": "preset",
+    "color": "#ffffff",
+    "effect": "0",
+    "preset": "5",
+    "scene": "0",
+    "brightness": "100",
+    "wled_ip": "192.168.1.199",
+    "govee_api_key": "",
+    "govee_device_id": "",
+    "govee_model": "",
+    "hue_bridge_ip": "",
+    "hue_username": "",
+    "telegram_bot_token": "8434500839:AAGglf1XQjaYmOZphCptlM21DaHIDY3o2ak",
+    "telegram_chat_id": "-1003342345259",
+    "last_message_id": 21,
+    "polling_rate": 2
+}
