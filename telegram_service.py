@@ -1,0 +1,168 @@
+"""
+Telegram Service - Shared service for monitoring Telegram messages
+"""
+
+import asyncio
+import time
+from PySide6.QtCore import QThread, Signal
+from telegram import Bot
+from telegram.error import TelegramError
+from telegram.request import HTTPXRequest
+
+
+class TelegramService(QThread):
+    """
+    Shared Telegram service that monitors for new messages
+    Emits signals that plugins can connect to
+    """
+    
+    message_received = Signal(str)  # Emitted when new message arrives
+    status_changed = Signal(str, str)  # status text, color
+    
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.running = False
+        self.bot = None
+        self.loop = None
+    
+    def run(self):
+        """Main thread loop for Telegram polling"""
+        if self.running:
+            return
+        
+        self.running = True
+        self.status_changed.emit("Connecting to Telegram...", "#ffa500")
+        
+        bot_token = self.config.get("telegram_bot_token", "")
+        chat_id = self.config.get("telegram_chat_id", "")
+        
+        # Validate credentials
+        if not bot_token or not chat_id:
+            self.status_changed.emit("❌ Bot token or chat ID not configured", "#ff4444")
+            self.running = False
+            return
+        
+        if ":" not in bot_token:
+            self.status_changed.emit("❌ Invalid bot token format", "#ff4444")
+            self.running = False
+            return
+        
+        # Create event loop
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        
+        try:
+            # Initialize bot
+            request = HTTPXRequest(connection_pool_size=1, connect_timeout=30, read_timeout=30)
+            self.bot = Bot(token=bot_token, request=request)
+            
+            # Test connection
+            bot_info = self.loop.run_until_complete(
+                asyncio.wait_for(self.bot.get_me(), timeout=30.0)
+            )
+            
+            self.status_changed.emit(
+                f"✓ Connected as @{bot_info.username}", 
+                "#00ff00"
+            )
+            
+            # Start polling
+            self.poll_messages(chat_id)
+            
+        except asyncio.TimeoutError:
+            self.status_changed.emit("❌ Connection timeout", "#ff4444")
+        except TelegramError as e:
+            error_msg = str(e)
+            if "Unauthorized" in error_msg:
+                self.status_changed.emit("❌ Invalid bot token", "#ff4444")
+            elif "Not Found" in error_msg:
+                self.status_changed.emit("❌ Bot not found", "#ff4444")
+            else:
+                self.status_changed.emit(f"❌ Telegram error: {error_msg[:30]}", "#ff4444")
+        except Exception as e:
+            self.status_changed.emit(f"❌ Error: {str(e)[:30]}", "#ff4444")
+        finally:
+            if self.loop:
+                self.loop.close()
+            self.running = False
+    
+    def poll_messages(self, chat_id):
+        """Poll for new messages"""
+        last_update_id = 0
+        
+        while self.running:
+            try:
+                # Get updates
+                updates = self.loop.run_until_complete(
+                    asyncio.wait_for(
+                        self.bot.get_updates(
+                            timeout=5,
+                            offset=last_update_id + 1 if last_update_id > 0 else None
+                        ),
+                        timeout=10.0
+                    )
+                )
+                
+                # Process updates
+                for update in updates:
+                    last_update_id = update.update_id
+                    
+                    # Handle regular messages
+                    if update.message:
+                        if str(update.message.chat_id) == str(chat_id):
+                            message_id = update.message.message_id
+                            message_text = update.message.text or ""
+                            
+                            if message_id > self.config.get("last_message_id", 0):
+                                if self._passes_filter(message_text):
+                                    self.config["last_message_id"] = message_id
+                                    self.message_received.emit(message_text)
+                    
+                    # Handle channel posts
+                    elif update.channel_post:
+                        if str(update.channel_post.chat_id) == str(chat_id):
+                            post_id = update.channel_post.message_id
+                            post_text = update.channel_post.text or ""
+                            
+                            if post_id > self.config.get("last_message_id", 0):
+                                if self._passes_filter(post_text):
+                                    self.config["last_message_id"] = post_id
+                                    self.message_received.emit(post_text)
+            
+            except asyncio.TimeoutError:
+                # Normal timeout, continue
+                pass
+            except Exception as e:
+                self.status_changed.emit(f"⚠ Polling error: {str(e)[:30]}", "#ffaa00")
+            
+            # Interruptible sleep; respect live polling rate changes
+            polling_rate = self.config.get("polling_rate", 2)
+            for _ in range(polling_rate * 10):
+                if not self.running:
+                    break
+                time.sleep(0.1)
+    
+    def stop(self):
+        """Stop the Telegram service"""
+        self.running = False
+        if self.isRunning():
+            self.quit()
+            self.wait(2000)
+        self.status_changed.emit("⏸ Stopped", "#888888")
+    
+    def is_running(self):
+        """Check if service is running"""
+        return self.running
+
+    def _passes_filter(self, text: str) -> bool:
+        """Return True if filter is disabled or keyword is matched"""
+        enabled = bool(self.config.get("filter_enabled", False))
+        keyword = (self.config.get("filter_keyword") or "").strip().lower()
+
+        if not enabled:
+            return True
+        if not keyword:
+            return True
+
+        return keyword in (text or "").lower()

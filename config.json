@@ -1,0 +1,21 @@
+{
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
+    "last_message_id": 0,
+    "polling_rate": 2,
+    "filter_enabled": false,
+    "filter_keyword": "",
+    "led_type": "wled",
+    "wled_ip": "",
+    "preset": "1",
+    "govee_api_key": "",
+    "govee_device_id": "",
+    "govee_model": "",
+    "hue_bridge_ip": "",
+    "hue_username": "",
+    "action": "on",
+    "color": "#ffffff",
+    "effect": "0",
+    "scene": "0",
+    "brightness": "100"
+}
