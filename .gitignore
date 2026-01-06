@@ -1,0 +1,42 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python packaging / build
+build/
+dist/
+*.egg-info/
+*.spec
+
+# Logs / local data
+*.log
+config.json
+
+# PyInstaller/py2exe
+*.manifest
+*.spec
+
+# Tests / coverage
+htmlcov/
+.coverage
+.pytest_cache/
+
+# App Files
+config.json

@@ -1,64 +1,52 @@
 # RustPlus Raid Alarms
 
-A plugin-based application that monitors Telegram for raid alarms and triggers customizable actions through plugins.
+Sleek, plugin-based desktop app that listens to Telegram for raid alarms and triggers customizable actions (e.g., LEDs). Drop in plugins—no code changes to the core.
 
 ## Features
+- **Telegram listener** with polling rate control and optional keyword filter.
+- **Auto-discovered plugins**: just add files/folders under `plugins/`.
+- **Modern dark UI** with card/hero styling and left-side nav.
+- **LED Controller plugin**: WLED, Govee, Philips Hue with presets/effects/color/brightness.
+- **Example plugin** template showing UI, config, and Telegram hook.
 
-- **Telegram Listener Core**: Monitors Telegram chat for raid alarm messages
-- **Plugin System**: Easily extensible with custom plugins
-- **Modern UI**: Sleek dark theme with vertical navigation tabs
-- **LED Controller Plugin**: Control WLED, Govee, or Philips Hue lights when raids are detected
-
-## Installation
-
-1. Install dependencies:
+## Quick start
+1) Install deps
 ```bash
 pip install -r requirements.txt
 ```
-
-2. Configure your Telegram bot:
-   - Create a bot with [@BotFather](https://t.me/botfather)
-   - Get your bot token and chat ID
-   - Edit `config.json` with your credentials
-
-3. Run the application:
+2) Configure Telegram (bot token + chat ID) via the in-app **Settings** (or edit `config.json`).
+3) Run the app
 ```bash
 python main.py
 ```
 
-## Plugin Development
+See `docs/TELEGRAM_SETUP.md` if you need help creating a bot and chat ID.
 
-To create a new plugin:
+## Plugins
+- Auto-loaded from `plugins/` every few seconds—no restart required.
+- Single-file (`plugins/foo.py`) or package (`plugins/foo/__init__.py`) both work.
+- Use relative imports inside plugin packages.
+- Example: `plugins/example_plugin` shows config saving, message box, and Telegram handling.
 
-1. Create a new folder in the `plugins/` directory
-2. Create an `__init__.py` file that imports `PluginBase`
-3. Create a `Plugin` class that inherits from `PluginBase`
-4. Implement the required methods:
-   - `get_name()` - Plugin display name
-   - `get_icon()` - Plugin icon (emoji)
-   - `get_widget()` - Qt widget for the UI
-   - `on_telegram_message(message)` - Handler for Telegram messages
+Docs: `docs/PLUGIN_DEVELOPMENT.md`, `docs/LED_PLUGIN.md`, `docs/TELEGRAM_SETUP.md`, `docs/TROUBLESHOOTING.md`.
 
-Example plugin structure:
-```
-plugins/
-  my_plugin/
-    __init__.py
-    other_files.py
-```
+## LED Controller plugin (built-in)
+- Targets: WLED, Govee, Philips Hue.
+- Actions: on/off, color, effect, preset, scene (Govee), brightness.
+- Brightness and color pickers, per-type settings (IP/API keys/models/bridge credentials).
 
-The plugin will automatically appear in the UI when you restart the application!
+## Config
+- Stored in `config.json` (auto-created/merged on launch).
+- Includes Telegram creds, polling rate, filter toggle/keyword, and LED settings.
 
-## Configuration
+## Project structure (key parts)
+- `main.py` — app shell, plugin loader, Telegram service wiring, dark theme.
+- `telegram_service.py` — polling thread + filter.
+- `plugin_base.py` — Plugin contract.
+- `plugins/` — all plugins (LED controller, example, your additions).
+- `docs/` — docs for plugins and Telegram setup.
 
-Edit `config.json` to configure:
-- Telegram bot credentials
-- LED system settings (WLED/Govee/Hue)
-- Polling rate and other preferences
-
-## Current Plugins
-
-### LED Controller
-- Supports WLED, Govee, and Philips Hue
-- Triggers light effects on raid alarms
-- Configurable presets and colors
+## Contributing
+- Add new plugins under `plugins/` and they will appear automatically.
+- Keep UI pieces within plugin widgets; avoid touching core unless necessary.
+- If you add new dependencies, note them in `requirements.txt`.

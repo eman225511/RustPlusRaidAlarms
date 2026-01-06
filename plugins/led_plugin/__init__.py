@@ -507,67 +507,22 @@ class Plugin(PluginBase):
     # Styling
     # ------------------------------------------------------------------
     def get_groupbox_style(self):
+        # Keep cards consistent with main theme; let global styles handle inputs.
         return """
             QGroupBox {
                 background-color: #131418;
                 border: 1px solid #2a2c33;
-                border-radius: 12px;
-                padding: 20px 10px 10px 10px;
+                border-radius: 14px;
+                padding: 18px 12px 12px 12px;
                 margin-top: 12px;
-                color: #ffffff;
+                color: #d4d4d4;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
                 subcontrol-position: top left;
-                padding: 5px 10px;
-                color: #ffffff;
-            }
-            QLabel {
-                color: #cccccc;
-            }
-            QLineEdit {
-                background-color: #1e1e1e;
-                border: 2px solid #3e3e42;
-                border-radius: 5px;
-                padding: 8px;
+                padding: 6px 10px;
                 color: #d4d4d4;
-                min-height: 28px;
-            }
-            QLineEdit:focus {
-                border: 2px solid #0e639c;
-            }
-            QSpinBox {
-                background-color: #1e1e1e;
-                border: 2px solid #3e3e42;
-                border-radius: 5px;
-                padding: 8px;
-                color: #d4d4d4;
-                min-height: 28px;
-            }
-            QSpinBox:focus {
-                border: 2px solid #0e639c;
-            }
-            QComboBox {
-                background-color: #1e1e1e;
-                border: 2px solid #3e3e42;
-                border-radius: 5px;
-                padding: 8px;
-                color: #d4d4d4;
-                min-height: 28px;
-            }
-            QComboBox:focus {
-                border: 2px solid #0e639c;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-            QRadioButton {
-                color: #cccccc;
-                spacing: 8px;
-            }
-            QRadioButton::indicator {
-                width: 18px;
-                height: 18px;
+                font-weight: 600;
             }
         """
 
