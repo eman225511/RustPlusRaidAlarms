@@ -714,8 +714,9 @@ class MainWindow(QMainWindow):
                     height: 16px;
                 }
             """)
-            enable_checkbox.stateChanged.connect(
-                lambda state, p=plugin: self.on_plugin_enabled_changed(p, state)
+            # Use toggled(bool) to avoid partial-check edge cases and get a clean bool
+            enable_checkbox.toggled.connect(
+                lambda checked, p=plugin: self.on_plugin_enabled_changed(p, checked)
             )
             
             plugin_row_layout.addWidget(plugin_btn)
@@ -808,13 +809,22 @@ class MainWindow(QMainWindow):
             self.telegram_service.stop()
             QTimer.singleShot(500, self.telegram_service.start)
     
-    def on_plugin_enabled_changed(self, plugin, state):
+    def on_plugin_enabled_changed(self, plugin, is_enabled: bool):
         """Handle plugin enable/disable checkbox change"""
         plugin_name = plugin.get_name()
-        is_enabled = state == Qt.Checked
+        is_enabled = bool(is_enabled)
         self.plugin_enabled[plugin_name] = is_enabled
         self.config[f"plugin_enabled_{plugin_name}"] = is_enabled
         self.save_config()
+        
+        try:
+            if is_enabled:
+                plugin.on_enable()
+            else:
+                plugin.on_disable()
+        except Exception as e:
+            # Keep UI responsive even if a plugin errors during toggle
+            self.log(f"✗ Plugin '{plugin_name}' toggle error: {str(e)}")
         
         status = "enabled" if is_enabled else "disabled"
         self.log(f"Plugin '{plugin_name}' {status}")
