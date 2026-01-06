@@ -37,6 +37,3 @@ config.json
 htmlcov/
 .coverage
 .pytest_cache/
-
-# App Files
-config.json
