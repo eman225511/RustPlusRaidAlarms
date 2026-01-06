@@ -1,29 +1,90 @@
 # Telegram Setup
 
-Follow these steps to get a bot and chat ID working with this app.
+This guide walks you through creating a Telegram bot and obtaining your chat ID for use with RustPlus Raid Alarms.
 
-## 1) Create a bot
-1. Open Telegram and start a chat with [@BotFather](https://t.me/BotFather).
-2. Send `/newbot` and follow the prompts to name it.
-3. BotFather returns a token like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz` — copy it.
+## Prerequisites
+- Telegram account (mobile or desktop app)
+- A Telegram channel or group where raid alarms will be sent
 
-## 2) Add the bot to your channel or group
-1. Open your target channel/group settings → Administrators.
-2. Add your new bot; grant permission to post messages.
-3. If you use IFTTT or another sender, add that bot as admin too.
+## Step 1: Create a Telegram Bot
 
-## 3) Get the chat ID
-Pick one method:
-- Forward any channel message to @userinfobot or @RawDataBot; copy the `chat.id` (channels start with `-100`).
-- Or hit `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` after posting a message; find `"chat":{"id":...}` in the JSON.
+1. Open Telegram and start a chat with [@BotFather](https://t.me/BotFather)
+2. Send the command `/newbot`
+3. Follow the prompts:
+   - Choose a display name for your bot (e.g., "My Raid Alarm Bot")
+   - Choose a username ending in "bot" (e.g., "my_raid_alarm_bot")
+4. BotFather will respond with your bot token:
+   ```
+   123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+   ```
+   **⚠️ Keep this token secure!** Anyone with the token can control your bot.
 
-## 4) Configure the app
-1. Launch the app.
-2. Open Settings → paste the bot token and chat ID.
-3. Save. The status pill should turn green when connected.
+## Step 2: Add Bot to Your Channel/Group
 
-## 5) Troubleshooting
-- Tokens must contain one colon (`:`); otherwise they are invalid.
-- Channel IDs usually start with `-100`. Groups may be shorter negative numbers.
-- Ensure the bot is an admin and can post.
-- If polling errors persist, regenerate a token with BotFather and update the app.
+1. Open your target channel or group
+2. Go to **Settings** → **Administrators** → **Add Admin**
+3. Search for your bot by username
+4. Grant the bot permission to **Post Messages** (minimum required)
+5. If using IFTTT, also add the IFTTT bot as an admin
+
+## Step 3: Get Your Chat ID
+
+You need the numeric ID of your channel/group. Choose one method:
+
+### Method A: Using a Bot (Easiest)
+1. Forward any message from your channel to [@userinfobot](https://t.me/userinfobot) or [@RawDataBot](https://t.me/RawDataBot)
+2. The bot will reply with the message details
+3. Look for `chat.id` or `Chat ID` (channels start with `-100`, e.g., `-1001234567890`)
+
+### Method B: Using Telegram API
+1. Post a test message in your channel/group
+2. Visit this URL in your browser (replace `<YOUR_BOT_TOKEN>`):
+   ```
+   https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+   ```
+3. Look for the `"chat":{"id":...}` field in the JSON response
+4. Copy the numeric ID (including the minus sign)
+
+## Step 4: Configure the App
+
+1. Launch RustPlus Raid Alarms
+2. Click the **Settings** button in the top toolbar
+3. Enter your bot token and chat ID:
+   - **Bot Token**: Paste the token from Step 1
+   - **Chat ID**: Paste the ID from Step 3
+4. Click **Save**
+5. The status pill should turn **green** when connected successfully
+
+## Step 5: Test the Connection
+
+1. Send a test message to your channel/group
+2. The app should receive the message (check the Telegram service status)
+3. If you have the LED plugin configured, it should trigger on matching keywords
+
+## Next Steps
+
+- **Set up IFTTT integration**: See [IFTTT + Rust+ Setup Guide](IFTTT_RUST_SETUP.md) to automatically send raid alarms from your Rust server
+- **Configure LED actions**: Navigate to the LED plugin tab to set up your WLED/Govee/Hue device
+- **Customize keyword filters**: Enable filtering in Settings to only trigger on specific keywords (e.g., "raid", "attack")
+
+## Troubleshooting
+
+### Bot Token Issues
+- **Invalid token format**: Tokens must contain exactly one colon (`:`) in the format `nnnnnnn:xxxxxxxxxxx`
+- **Token doesn't work**: Regenerate a new token with BotFather using `/revoke` then `/newbot`
+
+### Chat ID Issues
+- **Channel IDs**: Should start with `-100` (e.g., `-1001234567890`)
+- **Group IDs**: May be shorter negative numbers (e.g., `-123456789`)
+- **Wrong ID**: Make sure you copied the entire ID including the minus sign
+
+### Connection Issues
+- **Red status pill**: Check that your bot token and chat ID are correct
+- **No messages received**: Ensure the bot is an admin in your channel/group
+- **Polling errors**: Check your internet connection and firewall settings
+
+### Permission Issues
+- **Bot can't read messages**: Add the bot as an admin with "Post Messages" permission
+- **IFTTT messages not appearing**: Also add the IFTTT bot as an admin
+
+For more help, see the [Troubleshooting Guide](TROUBLESHOOTING.md).

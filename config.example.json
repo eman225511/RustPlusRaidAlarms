@@ -7,7 +7,6 @@
     "filter_keyword": "",
     "led_type": "wled",
     "wled_ip": "",
-    "preset": "1",
     "govee_api_key": "",
     "govee_device_id": "",
     "govee_model": "",
@@ -16,6 +15,8 @@
     "action": "on",
     "color": "#ffffff",
     "effect": "0",
+    "preset": "0",
     "scene": "0",
-    "brightness": "100"
+    "brightness": "100",
+    "show_example_plugins": false
 }

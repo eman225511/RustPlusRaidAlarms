@@ -29,16 +29,32 @@ This app discovers plugins from the `plugins/` folder automatically. Drop in a P
 - `self.config` is a shared dict persisted by the main app.
 - Read defaults with `self.config.get("key", default)`.
 - Update values in your UI handlers, then call `self.config[...] = value`; the app persists on save (or you can call main `save_config` if exposed). The example plugin shows inline persistence.
+- Per-plugin enable/disable: the main UI has a checkbox beside each plugin; users can turn your plugin off without removing it.
+- Example plugins visibility: hidden by default; users must enable "Show Example Plugins (For Devs)" to see them.
 
 ## Telegram hook
 - `on_telegram_message(self, message: str)` is invoked on every incoming Telegram message (post-filter). Use it to trigger actions. Keep handlers fast; offload long work to threads if needed.
 
 ## Example walkthrough
-See `plugins/example_plugin/__init__.py` for a compact reference including:
-- Building a card UI with title, subtitle, and controls.
-- Reading/saving a text setting to `self.config`.
-- Showing a `QMessageBox`.
-- Reacting to Telegram messages.
+
+### Package-based Plugin (Advanced)
+See `plugins/example_plugin/__init__.py` for a full-featured reference including:
+- Hero card UI with title and subtitle
+- Reading/saving text settings to `self.config`
+- Showing `QMessageBox` dialogs
+- Reacting to Telegram messages with hooks
+- Status labels and user feedback
+- Multiple UI cards and sections
+
+### Single-file Plugin (Simple)
+See `plugins/simple_example.py` for a minimal single-file example including:
+- Basic card UI with title and subtitle
+- Click counter with config persistence
+- Name input field with save functionality
+- Simple button interactions
+- Reacting to Telegram messages
+
+**Note**: Example plugins are hidden by default. Enable "Show Example Plugins (For Devs)" in the navigation sidebar to view them.
 
 ## Minimal skeleton
 ```python

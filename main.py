@@ -11,14 +11,60 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QLabel, QPushButton, QTabWidget,
                                QTextEdit, QFrame, QScrollArea, QSplitter,
                                QCheckBox, QLineEdit, QSpinBox, QDialog,
-                               QFormLayout, QDialogButtonBox)
-from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QFont, QColor, QPalette
+                               QFormLayout, QDialogButtonBox, QSizePolicy)
+from PySide6.QtCore import Qt, Signal, QTimer, QPoint, QMimeData, QSize
+from PySide6.QtGui import QFont, QColor, QPalette, QDrag
 
 from telegram_service import TelegramService
 from plugin_base import PluginBase
 
 CONFIG_FILE = "config.json"
+
+
+class DraggableButton(QPushButton):
+    """Custom button that supports drag-and-drop reordering"""
+    
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.setAcceptDrops(True)
+        self.drag_start_position = None
+        self.is_core_tab = False  # Core tab shouldn't be draggable
+        
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and not self.is_core_tab:
+            self.drag_start_position = event.position().toPoint()
+        super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.LeftButton) or self.is_core_tab:
+            return
+        if self.drag_start_position is None:
+            return
+        if (event.position().toPoint() - self.drag_start_position).manhattanLength() < QApplication.startDragDistance():
+            return
+        
+        # Start drag
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        mime_data.setText(str(id(self)))  # Use object id as identifier
+        drag.setMimeData(mime_data)
+        drag.exec(Qt.MoveAction)
+    
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+    
+    def dropEvent(self, event):
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+            # Walk up to find handler
+            handler = self
+            while handler is not None and not hasattr(handler, 'handle_tab_reorder'):
+                handler = handler.parent()
+            if handler is not None and hasattr(handler, 'handle_tab_reorder'):
+                source_id = event.mimeData().text()
+                target_id = str(id(self))
+                handler.handle_tab_reorder(source_id, target_id)
 
 
 class ModernTab(QWidget):
@@ -51,6 +97,9 @@ class MainWindow(QMainWindow):
         self.plugins = []
         self.plugin_widgets = {}
         self.loaded_plugin_keys = set()  # track loaded plugin files
+        self.tab_button_map = {}  # Map button IDs to (button, tab_index, plugin)
+        self.plugin_enabled = {}  # Track enabled/disabled state per plugin
+        self.show_example_plugins = self.config.get("show_example_plugins", False)
         
         # Setup UI
         self.setup_ui()
@@ -98,6 +147,7 @@ class MainWindow(QMainWindow):
             "preset": "0",
             "scene": "0",
             "brightness": "100",
+            "show_example_plugins": False,
         }
 
         # Merge defaults without overwriting existing values
@@ -311,6 +361,14 @@ class MainWindow(QMainWindow):
         log_header.addStretch()
         log_layout.addLayout(log_header)
 
+        # Clear log button
+        clear_log_btn = QPushButton("🧹 Clear Log")
+        clear_log_btn.setFont(QFont("Segoe UI", 10))
+        clear_log_btn.setMinimumHeight(32)
+        clear_log_btn.setStyleSheet(self.get_button_style("#6c757d"))
+        clear_log_btn.clicked.connect(self.clear_log)
+        log_header.addWidget(clear_log_btn)
+
         self.log_display = QTextEdit()
         self.log_display.setReadOnly(True)
         self.log_display.setFont(QFont("Consolas", 10))
@@ -354,7 +412,8 @@ class MainWindow(QMainWindow):
         tab_layout.addWidget(title)
         
         # Core button
-        core_btn = QPushButton("🏠 Core")
+        core_btn = DraggableButton("🏠 Core")
+        core_btn.is_core_tab = True  # Core tab shouldn't be draggable
         core_btn.setFont(QFont("Segoe UI", 10))
         core_btn.setMinimumHeight(38)
         core_btn.setStyleSheet(self.get_tab_button_style(True))
@@ -377,6 +436,23 @@ class MainWindow(QMainWindow):
         plugin_label.setAlignment(Qt.AlignCenter)
         tab_layout.addWidget(plugin_label)
         
+        # Show example plugins checkbox
+        self.show_examples_checkbox = QCheckBox("Show Example Plugins (For Devs)")
+        self.show_examples_checkbox.setChecked(self.show_example_plugins)
+        self.show_examples_checkbox.setStyleSheet("""
+            QCheckBox {
+                color: #9aa0a6;
+                font-size: 9px;
+                padding: 4px 6px;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+            }
+        """)
+        self.show_examples_checkbox.toggled.connect(self.on_show_examples_changed)
+        tab_layout.addWidget(self.show_examples_checkbox)
+        
         # Plugin buttons container
         self.plugin_buttons_layout = QVBoxLayout()
         self.plugin_buttons_layout.setSpacing(6)
@@ -392,7 +468,96 @@ class MainWindow(QMainWindow):
         
         # Update button styles
         for i, btn in enumerate(self.tab_buttons):
-            btn.setStyleSheet(self.get_tab_button_style(i == index))
+            if i == 0:
+                tab_idx = 0  # core tab
+            else:
+                mapping = self.tab_button_map.get(str(id(btn)), {})
+                tab_idx = mapping.get('tab_index', i)
+            btn.setStyleSheet(self.get_tab_button_style(tab_idx == index))
+    
+    def handle_tab_reorder(self, source_id, target_id):
+        """Handle reordering of tabs when dragged and dropped"""
+        if source_id == target_id:
+            return
+        
+        # Find source and target buttons in the list
+        source_idx = None
+        target_idx = None
+
+        for i, btn in enumerate(self.tab_buttons):
+            if str(id(btn)) == source_id:
+                source_idx = i
+            if str(id(btn)) == target_id:
+                target_idx = i
+
+        if source_idx is None or target_idx is None:
+            return
+
+        # Don't allow reordering with Core tab (index 0)
+        if source_idx == 0 or target_idx == 0:
+            return
+
+        source_btn = self.tab_buttons[source_idx]
+        target_btn = self.tab_buttons[target_idx]
+
+        source_row = self.tab_button_map[str(id(source_btn))]['row_widget']
+        target_row = self.tab_button_map[str(id(target_btn))]['row_widget']
+
+        # Find layout positions of the rows
+        def index_of_row(row_widget):
+            for i in range(self.plugin_buttons_layout.count()):
+                item = self.plugin_buttons_layout.itemAt(i)
+                if item and item.widget() is row_widget:
+                    return i
+            return -1
+
+        source_row_idx = index_of_row(source_row)
+        target_row_idx = index_of_row(target_row)
+        if source_row_idx == -1 or target_row_idx == -1:
+            return
+
+        # Remove source row
+        self.plugin_buttons_layout.removeWidget(source_row)
+        source_row.setParent(None)
+        self.tab_buttons.pop(source_idx)
+
+        # Adjust target index if needed
+        if source_row_idx < target_row_idx:
+            target_row_idx -= 1
+
+        # Insert row and button back
+        self.plugin_buttons_layout.insertWidget(target_row_idx, source_row)
+        self.tab_buttons.insert(target_idx, source_btn)
+
+        # Rebuild tab_button_map in new order (preserve tab_index and flags)
+        new_map = {}
+        for btn in self.tab_buttons[1:]:  # skip core
+            old = self.tab_button_map.get(str(id(btn)), {})
+            new_map[str(id(btn))] = old
+        self.tab_button_map.update(new_map)
+
+        # Reattach the row to layout
+        source_row.show()
+
+        # Update the tab indices and reconnect click handlers
+        self.update_tab_indices()
+    
+    def update_tab_indices(self):
+        """Update tab indices after reordering"""
+        for i, btn in enumerate(self.tab_buttons):
+            # Determine the correct content_stack index for this button
+            if i == 0:
+                tab_idx = 0  # Core tab always 0
+            else:
+                mapping = self.tab_button_map.get(str(id(btn)), {})
+                tab_idx = mapping.get('tab_index', i)
+
+            try:
+                btn.clicked.disconnect()
+            except TypeError:
+                # No connections to disconnect
+                pass
+            btn.clicked.connect(lambda checked=False, idx=tab_idx: self.switch_tab(idx))
     
     def get_tab_button_style(self, active=False):
         """Get stylesheet for tab buttons"""
@@ -517,14 +682,68 @@ class MainWindow(QMainWindow):
                 plugin_widget,
                 ""
             )
+            
+            # Check if this is an example plugin (name or path contains "example")
+            plugin_name = plugin.get_name()
+            is_example = (
+                "example" in plugin_name.lower()
+                or "example" in plugin_file.name.lower()
+                or "example" in plugin_file.parent.name.lower()
+            )
 
-            plugin_btn = QPushButton(f"{plugin.get_icon()} {plugin.get_name()}")
+            # Create plugin row with button and checkbox
+            plugin_row = QWidget()
+            plugin_row_layout = QHBoxLayout(plugin_row)
+            plugin_row_layout.setContentsMargins(0, 0, 0, 0)
+            plugin_row_layout.setSpacing(4)
+            
+            plugin_btn = DraggableButton(f"{plugin.get_icon()} {plugin_name}")
             plugin_btn.setFont(QFont("Segoe UI", 10))
             plugin_btn.setMinimumHeight(38)
+            plugin_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             plugin_btn.setStyleSheet(self.get_tab_button_style(False))
             plugin_btn.clicked.connect(lambda checked, idx=tab_index: self.switch_tab(idx))
-            self.plugin_buttons_layout.addWidget(plugin_btn)
+            
+            # Enable/disable checkbox
+            enable_checkbox = QCheckBox()
+            enable_checkbox.setChecked(self.config.get(f"plugin_enabled_{plugin_name}", True))
+            enable_checkbox.setToolTip(f"Enable/disable {plugin_name}")
+            enable_checkbox.setStyleSheet("""
+                QCheckBox::indicator {
+                    width: 16px;
+                    height: 16px;
+                }
+            """)
+            enable_checkbox.stateChanged.connect(
+                lambda state, p=plugin: self.on_plugin_enabled_changed(p, state)
+            )
+            
+            plugin_row_layout.addWidget(plugin_btn)
+            plugin_row_layout.addWidget(enable_checkbox)
+            
+            # Add to layout first
+            self.plugin_buttons_layout.addWidget(plugin_row)
             self.tab_buttons.append(plugin_btn)
+            
+            # Then set visibility (must be done after adding to layout)
+            if is_example and not self.show_example_plugins:
+                plugin_row.hide()
+            else:
+                plugin_row.show()
+            
+            # Store mapping for reordering
+            btn_id = str(id(plugin_btn))
+            self.tab_button_map[btn_id] = {
+                'button': plugin_btn,
+                'tab_index': tab_index,
+                'plugin': plugin,
+                'row_widget': plugin_row,
+                'checkbox': enable_checkbox,
+                'is_example': is_example
+            }
+            
+            # Store enabled state
+            self.plugin_enabled[plugin_name] = enable_checkbox.isChecked()
 
             self.plugins.append(plugin)
             self.plugin_widgets[plugin.get_name()] = plugin_widget
@@ -541,10 +760,13 @@ class MainWindow(QMainWindow):
         """Handle incoming Telegram messages"""
         self.log(f"📨 Telegram message received: {message[:50]}...")
         
-        # Notify all plugins
+        # Notify all enabled plugins
         for plugin in self.plugins:
             try:
-                plugin.on_telegram_message(message)
+                plugin_name = plugin.get_name()
+                # Only notify if plugin is enabled
+                if self.plugin_enabled.get(plugin_name, True):
+                    plugin.on_telegram_message(message)
             except Exception as e:
                 self.log(f"✗ Plugin {plugin.get_name()} error: {str(e)}")
     
@@ -586,11 +808,61 @@ class MainWindow(QMainWindow):
             self.telegram_service.stop()
             QTimer.singleShot(500, self.telegram_service.start)
     
+    def on_plugin_enabled_changed(self, plugin, state):
+        """Handle plugin enable/disable checkbox change"""
+        plugin_name = plugin.get_name()
+        is_enabled = state == Qt.Checked
+        self.plugin_enabled[plugin_name] = is_enabled
+        self.config[f"plugin_enabled_{plugin_name}"] = is_enabled
+        self.save_config()
+        
+        status = "enabled" if is_enabled else "disabled"
+        self.log(f"Plugin '{plugin_name}' {status}")
+    
+    def on_show_examples_changed(self, checked: bool):
+        """Handle show example plugins checkbox change"""
+        # Ensure checkbox reflects the requested state
+        if self.show_examples_checkbox.isChecked() != checked:
+            self.show_examples_checkbox.setChecked(checked)
+
+        self.show_example_plugins = bool(checked)
+        self.config["show_example_plugins"] = self.show_example_plugins
+        self.save_config()
+        
+        # Show/hide example plugin rows
+        count_shown = 0
+        count_total = 0
+        for btn_id, mapping in self.tab_button_map.items():
+            if mapping.get('is_example', False):
+                count_total += 1
+                row_widget = mapping['row_widget']
+                if self.show_example_plugins:
+                    row_widget.show()
+                    count_shown += 1
+                else:
+                    row_widget.hide()
+
+        # Force layout refresh to avoid stale visibility
+        self.plugin_buttons_layout.update()
+        self.tab_bar.update()
+
+        # Diagnostics in log
+        self.log(f"Show example toggle -> {'ON' if self.show_example_plugins else 'OFF'}, total examples: {count_total}, visible now: {count_shown}")
+        
+        if self.show_example_plugins:
+            self.log(f"Example plugins shown ({count_shown} plugins)")
+        else:
+            self.log(f"Example plugins hidden")
+    
     def log(self, message):
         """Add message to activity log"""
         from datetime import datetime
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_display.append(f"[{timestamp}] {message}")
+
+    def clear_log(self):
+        """Clear activity log display"""
+        self.log_display.clear()
     
     def apply_dark_theme(self):
         """Apply modern dark theme to application"""

@@ -16,9 +16,12 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
     QColorDialog,
+    QMessageBox,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
+
+import requests
 
 from .led_controller import LEDController, WLEDController, GoveeController, HueController
 
@@ -275,6 +278,17 @@ class Plugin(PluginBase):
         self.govee_model_input = QLineEdit(self.config.get("govee_model", ""))
         model_row.addWidget(self.govee_model_input)
         govee_layout.addLayout(model_row)
+
+        # Scan devices button
+        scan_row = QHBoxLayout()
+        scan_row.addStretch()
+        scan_btn = QPushButton("🔍 Scan Govee Devices")
+        scan_btn.setFont(QFont("Segoe UI", 10))
+        scan_btn.setMinimumHeight(32)
+        scan_btn.setStyleSheet(self.get_button_style("#0e639c"))
+        scan_btn.clicked.connect(self.scan_govee_devices)
+        scan_row.addWidget(scan_btn)
+        govee_layout.addLayout(scan_row)
         layout.addWidget(self.govee_group)
 
         # Hue configuration
@@ -407,6 +421,60 @@ class Plugin(PluginBase):
             w = self.brightness_row.itemAt(i).widget()
             if w:
                 w.setVisible(action == "brightness" or (led_type == "wled" and action in {"effect", "preset", "color"}))
+
+    def scan_govee_devices(self):
+        """Fetch Govee devices using the provided API key and populate fields."""
+        api_key = self.govee_api_input.text().strip()
+        if not api_key:
+            QMessageBox.warning(self.widget, "Govee Scan", "Please enter your Govee API key first.")
+            return
+
+        try:
+            resp = requests.get(
+                "https://developer-api.govee.com/v1/devices",
+                headers={"Govee-API-Key": api_key},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                QMessageBox.warning(
+                    self.widget,
+                    "Govee Scan",
+                    f"Failed to fetch devices (status {resp.status_code}).\nCheck your API key and try again.",
+                )
+                return
+
+            data = resp.json()
+            devices = data.get("data", {}).get("devices", []) if isinstance(data, dict) else []
+            if not devices:
+                QMessageBox.information(self.widget, "Govee Scan", "No devices found for this API key.")
+                return
+
+            first = devices[0]
+            device_id = first.get("device", "")
+            model = first.get("model", "")
+            self.govee_device_input.setText(device_id)
+            self.govee_model_input.setText(model)
+            self.config["govee_device_id"] = device_id
+            self.config["govee_model"] = model
+            self.config["govee_api_key"] = api_key
+            self.save_settings()
+
+            lines = []
+            for d in devices:
+                lines.append(f"- {d.get('device','?')} (model {d.get('model','?')})")
+            summary = "\n".join(lines)
+            QMessageBox.information(
+                self.widget,
+                "Govee Devices Found",
+                f"Found {len(devices)} device(s):\n{summary}\n\nFirst device applied to the form.",
+            )
+
+        except requests.RequestException as exc:
+            QMessageBox.warning(
+                self.widget,
+                "Govee Scan",
+                f"Network error while scanning devices:\n{exc}",
+            )
 
     def pick_color(self):
         color = QColorDialog.getColor(QColor(self.selected_color), self.widget, "Pick LED Color")
