@@ -200,11 +200,6 @@ class Plugin(PluginBase):
             devices_layout.addWidget(scroll_area)
             
             layout.addWidget(devices_group)
-            
-            # Auto-scan on first load
-            saved_devices = self.config.get("audio_alert_devices", [])
-            if saved_devices:
-                self.scan_audio_devices(devices_layout)
         
         # Audio Files Group
         self.audio_entries = []
@@ -239,6 +234,14 @@ class Plugin(PluginBase):
         
         layout.addWidget(test_frame)
         layout.addStretch()
+        
+        # Auto-scan devices after UI is built
+        if SOUNDDEVICE_AVAILABLE:
+            saved_devices = self.config.get("audio_alert_devices", [])
+            if saved_devices:
+                # Use QTimer to defer scan until after widget is shown
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(100, lambda: self.scan_audio_devices(None))
         
         return widget
     
@@ -408,8 +411,10 @@ class Plugin(PluginBase):
                     checkbox
                 )
             
-            self.status_label.setText(f"✓ Found {len(output_devices)} output device(s)")
-            self.status_label.setStyleSheet("color: #00ff00; padding: 10px;")
+            # Only update status if label exists
+            if hasattr(self, 'status_label'):
+                self.status_label.setText(f"✓ Found {len(output_devices)} output device(s)")
+                self.status_label.setStyleSheet("color: #00ff00; padding: 10px;")
             
         except Exception as e:
             error_label = QLabel(f"Error scanning devices: {str(e)[:50]}")
