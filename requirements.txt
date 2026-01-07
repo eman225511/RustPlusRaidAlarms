@@ -2,3 +2,5 @@ PySide6>=6.6.0
 python-telegram-bot>=20.7
 requests>=2.31.0
 twilio>=9.0.0
+pygame>=2.5.0
+sounddevice>=0.4.6
