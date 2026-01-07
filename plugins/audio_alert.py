@@ -382,10 +382,17 @@ class Plugin(PluginBase):
             saved_devices = self.config.get("audio_alert_devices", [])
             
             output_devices = []
+            seen_names = set()  # Track device names to avoid duplicates
+            
             for idx, device in enumerate(devices):
                 # Only show output devices
                 if device['max_output_channels'] > 0:
-                    output_devices.append((idx, device['name']))
+                    device_name = device['name']
+                    
+                    # Skip duplicates - some systems report the same device multiple times
+                    if device_name not in seen_names:
+                        seen_names.add(device_name)
+                        output_devices.append((idx, device_name))
             
             if not output_devices:
                 no_devices = QLabel("No output devices found")

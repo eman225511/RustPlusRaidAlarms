@@ -79,7 +79,8 @@ class TelegramService(QThread):
             
         except asyncio.TimeoutError:
             print("[Telegram] Connection timeout - check network/firewall")
-            self.status_changed.emit("❌ Connection timeout (check network/firewall)", "#ff4444")
+            self.status_changed.emit("❌ Connection timeout - retrying in 10s...", "#ff4444")
+            self.retry_connection(10)
         except TelegramError as e:
             error_msg = str(e)
             print(f"[Telegram] TelegramError: {error_msg}")
@@ -88,11 +89,13 @@ class TelegramService(QThread):
             elif "Not Found" in error_msg:
                 self.status_changed.emit("❌ Bot not found", "#ff4444")
             else:
-                self.status_changed.emit(f"❌ Telegram error: {error_msg[:50]}", "#ff4444")
+                self.status_changed.emit(f"❌ Telegram error: {error_msg[:50]} - retrying in 10s...", "#ff4444")
+                self.retry_connection(10)
         except Exception as e:
             error_msg = str(e)
             print(f"[Telegram] Exception: {error_msg}")
-            self.status_changed.emit(f"❌ Error: {error_msg[:50]}", "#ff4444")
+            self.status_changed.emit(f"❌ Error: {error_msg[:50]} - retrying in 10s...", "#ff4444")
+            self.retry_connection(10)
         finally:
             if self.loop:
                 self.loop.close()
@@ -162,6 +165,19 @@ class TelegramService(QThread):
             self.quit()
             self.wait(2000)
         self.status_changed.emit("⏸ Stopped", "#888888")
+    
+    def retry_connection(self, delay_seconds):
+        """Retry connection after a delay"""
+        if not self.running:
+            return
+        
+        print(f"[Telegram] Retrying connection in {delay_seconds} seconds...")
+        time.sleep(delay_seconds)
+        
+        # Restart the service if still running
+        if self.running:
+            print("[Telegram] Attempting reconnection...")
+            self.run()
     
     def is_running(self):
         """Check if service is running"""
