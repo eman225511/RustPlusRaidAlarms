@@ -258,7 +258,6 @@ class Plugin(PluginBase):
         if audio_data is None:
             audio_data = {
                 "file_path": "",
-                "device": "Default",
                 "volume": 100
             }
         
@@ -288,54 +287,6 @@ class Plugin(PluginBase):
         file_row.addWidget(browse_btn)
         
         group_layout.addLayout(file_row)
-        
-        # Device selection row
-        device_row = QHBoxLayout()
-        device_label = QLabel("Output Device:")
-        device_label.setMinimumWidth(100)
-        device_label.setFont(QFont("Segoe UI", 10))
-        device_row.addWidget(device_label)
-        
-        device_combo = QComboBox()
-        device_combo.setMinimumHeight(32)
-        device_combo.addItem("Default")
-        
-        # Try to get available audio devices
-        if PYGAME_AVAILABLE:
-            try:
-                # Note: pygame doesn't provide easy device enumeration
-                # Users will need to know their device names
-                device_combo.addItem("(Enter custom device name below)")
-            except:
-                pass
-        
-        current_device = audio_data.get("device", "Default")
-        index = device_combo.findText(current_device)
-        if index >= 0:
-            device_combo.setCurrentIndex(index)
-        else:
-            device_combo.addItem(current_device)
-            device_combo.setCurrentText(current_device)
-        
-        device_combo.currentTextChanged.connect(self.save_audio_config)
-        device_row.addWidget(device_combo)
-        
-        group_layout.addLayout(device_row)
-        
-        # Custom device name (if not default)
-        custom_device_row = QHBoxLayout()
-        custom_label = QLabel("Device Name:")
-        custom_label.setMinimumWidth(100)
-        custom_label.setFont(QFont("Segoe UI", 10))
-        custom_device_row.addWidget(custom_label)
-        
-        custom_device_input = QLineEdit(current_device if current_device != "Default" else "")
-        custom_device_input.setPlaceholderText("e.g., 'Speakers' or 'Headphones'")
-        custom_device_input.setMinimumHeight(32)
-        custom_device_input.textChanged.connect(lambda text: device_combo.setCurrentText(text) if text else device_combo.setCurrentText("Default"))
-        custom_device_row.addWidget(custom_device_input)
-        
-        group_layout.addLayout(custom_device_row)
         
         # Volume row
         volume_row = QHBoxLayout()
@@ -370,7 +321,7 @@ class Plugin(PluginBase):
         test_btn.setMaximumWidth(100)
         test_btn.setStyleSheet(self.get_button_style("#0e639c"))
         test_btn.clicked.connect(
-            lambda: self.test_play_single(file_input.text(), device_combo.currentText(), volume_spin.value())
+            lambda: self.test_play_single(file_input.text(), volume_spin.value())
         )
         volume_row.addWidget(test_btn)
         
@@ -386,11 +337,10 @@ class Plugin(PluginBase):
         group_layout.addLayout(volume_row)
         
         # Store references
+        # Store references
         entry = {
             "group": group,
             "file_input": file_input,
-            "device_combo": device_combo,
-            "custom_device_input": custom_device_input,
             "volume_spin": volume_spin,
             "volume_slider": volume_slider
         }
@@ -493,20 +443,15 @@ class Plugin(PluginBase):
         """Save all audio entries to config"""
         audio_files = []
         for entry in self.audio_entries:
-            device = entry["custom_device_input"].text().strip()
-            if not device:
-                device = entry["device_combo"].currentText()
-            
             audio_files.append({
                 "file_path": entry["file_input"].text().strip(),
-                "device": device,
                 "volume": entry["volume_spin"].value()
             })
         
         self.config["audio_alert_files"] = audio_files
     
-    def test_play_single(self, file_path, device, volume):
-        """Test play a single audio file"""
+    def test_play_single(self, file_path, volume):
+        """Test play a single audio file on all selected devices"""
         if not PYGAME_AVAILABLE:
             QMessageBox.warning(None, "Pygame Not Installed", "Please install pygame:\n\npip install pygame")
             return
@@ -519,12 +464,26 @@ class Plugin(PluginBase):
         self.status_label.setText(f"▶ Playing: {Path(file_path).name}")
         self.status_label.setStyleSheet("color: #00ff00; padding: 10px;")
         
-        # Create playback thread
-        thread = AudioPlaybackThread(file_path, device if device != "Default" else None, volume / 100.0)
-        thread.finished.connect(lambda: self.on_playback_finished(thread))
-        thread.error.connect(self.on_playback_error)
-        self.playback_threads.append(thread)
-        thread.start()
+        # Get selected devices or use default
+        selected_devices = self.config.get("audio_alert_devices", [])
+        if not selected_devices and SOUNDDEVICE_AVAILABLE:
+            selected_devices = ["Default"]
+        
+        # Play on each selected device
+        if SOUNDDEVICE_AVAILABLE and selected_devices:
+            for device_name in selected_devices:
+                thread = AudioPlaybackThread(file_path, device_name if device_name != "Default" else None, volume / 100.0)
+                thread.finished.connect(lambda t=thread: self.on_playback_finished(t))
+                thread.error.connect(self.on_playback_error)
+                self.playback_threads.append(thread)
+                thread.start()
+        else:
+            # Fallback to default device
+            thread = AudioPlaybackThread(file_path, None, volume / 100.0)
+            thread.finished.connect(lambda: self.on_playback_finished(thread))
+            thread.error.connect(self.on_playback_error)
+            self.playback_threads.append(thread)
+            thread.start()
     
     def test_play_all(self):
         """Test play all configured audio files"""
@@ -571,11 +530,10 @@ class Plugin(PluginBase):
                         thread.start()
                         valid_count += 1
                 else:
-                    # Fallback: use device from audio_data or default
-                    device = audio_data.get("device", "Default")
+                    # Fallback to default device
                     thread = AudioPlaybackThread(
                         file_path,
-                        device if device != "Default" else None,
+                        None,
                         volume / 100.0
                     )
                     thread.finished.connect(lambda t=thread: self.on_playback_finished(t))
