@@ -53,35 +53,46 @@ class TelegramService(QThread):
         asyncio.set_event_loop(self.loop)
         
         try:
-            # Initialize bot
-            request = HTTPXRequest(connection_pool_size=1, connect_timeout=30, read_timeout=30)
+            # Initialize bot with longer timeouts for slow connections
+            request = HTTPXRequest(
+                connection_pool_size=1,
+                connect_timeout=60,
+                read_timeout=60,
+                pool_timeout=60
+            )
             self.bot = Bot(token=bot_token, request=request)
             
-            # Test connection
+            # Test connection with extended timeout
+            print(f"[Telegram] Testing connection with bot token: {bot_token[:10]}...")
             bot_info = self.loop.run_until_complete(
-                asyncio.wait_for(self.bot.get_me(), timeout=30.0)
+                asyncio.wait_for(self.bot.get_me(), timeout=60.0)
             )
             
             self.status_changed.emit(
                 f"✓ Connected as @{bot_info.username}", 
                 "#00ff00"
             )
+            print(f"[Telegram] Connected as @{bot_info.username}")
             
             # Start polling
             self.poll_messages(chat_id)
             
         except asyncio.TimeoutError:
-            self.status_changed.emit("❌ Connection timeout", "#ff4444")
+            print("[Telegram] Connection timeout - check network/firewall")
+            self.status_changed.emit("❌ Connection timeout (check network/firewall)", "#ff4444")
         except TelegramError as e:
             error_msg = str(e)
+            print(f"[Telegram] TelegramError: {error_msg}")
             if "Unauthorized" in error_msg:
                 self.status_changed.emit("❌ Invalid bot token", "#ff4444")
             elif "Not Found" in error_msg:
                 self.status_changed.emit("❌ Bot not found", "#ff4444")
             else:
-                self.status_changed.emit(f"❌ Telegram error: {error_msg[:30]}", "#ff4444")
+                self.status_changed.emit(f"❌ Telegram error: {error_msg[:50]}", "#ff4444")
         except Exception as e:
-            self.status_changed.emit(f"❌ Error: {str(e)[:30]}", "#ff4444")
+            error_msg = str(e)
+            print(f"[Telegram] Exception: {error_msg}")
+            self.status_changed.emit(f"❌ Error: {error_msg[:50]}", "#ff4444")
         finally:
             if self.loop:
                 self.loop.close()
@@ -145,6 +156,7 @@ class TelegramService(QThread):
     
     def stop(self):
         """Stop the Telegram service"""
+        print("[Telegram] Stopping service...")
         self.running = False
         if self.isRunning():
             self.quit()

@@ -805,7 +805,8 @@ class MainWindow(QMainWindow):
         """Open settings dialog"""
         dialog = SettingsDialog(self.config, self)
         if dialog.exec():
-            # Config was updated, reload Telegram service
+            # Config was saved in dialog, now persist to file and reload Telegram service
+            self.save_config()
             self.telegram_service.stop()
             QTimer.singleShot(500, self.telegram_service.start)
     
@@ -1015,7 +1016,7 @@ class SettingsDialog(QDialog):
         
         # Buttons
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.accept)
+        button_box.accepted.connect(self.save_and_accept)
         button_box.rejected.connect(self.reject)
         button_box.setStyleSheet("""
             QPushButton {
@@ -1051,6 +1052,12 @@ class SettingsDialog(QDialog):
                 border: 2px solid #0e639c;
             }
         """)
+    
+    def save_and_accept(self):
+        """Save settings to config and close dialog"""
+        self.config["telegram_bot_token"] = self.bot_token_input.text().strip()
+        self.config["telegram_chat_id"] = self.chat_id_input.text().strip()
+        self.accept()
 
 
 def main():
