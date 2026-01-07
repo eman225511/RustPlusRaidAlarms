@@ -49,10 +49,34 @@ class Plugin(PluginBase):
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(16, 16, 16, 16)
         
+        # Title row with help button
+        title_row = QHBoxLayout()
+        
         title = QLabel("💬 Discord Webhook")
         title.setFont(QFont("Segoe UI", 22, QFont.Bold))
         title.setStyleSheet("color: #ffffff;")
-        header_layout.addWidget(title)
+        title_row.addWidget(title)
+        
+        help_btn = QPushButton("❓")
+        help_btn.setFont(QFont("Segoe UI", 14))
+        help_btn.setMaximumWidth(35)
+        help_btn.setMaximumHeight(35)
+        help_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d30;
+                border: 1px solid #3e3e42;
+                border-radius: 17px;
+                color: #d4d4d4;
+            }
+            QPushButton:hover {
+                background-color: #3e3e42;
+            }
+        """)
+        help_btn.clicked.connect(self.show_help)
+        title_row.addWidget(help_btn)
+        title_row.addStretch()
+        
+        header_layout.addLayout(title_row)
         
         subtitle = QLabel("Post raid alerts to Discord channels")
         subtitle.setFont(QFont("Segoe UI", 11))
@@ -281,6 +305,73 @@ class Plugin(PluginBase):
         """Called when Telegram message received - send to Discord"""
         print("[Discord] Raid alert received, sending to Discord...")
         self.send_discord_message(message)
+    
+    def show_help(self):
+        """Show setup guide"""
+        help_text = """<b>Discord Webhook Setup Guide</b><br><br>
+
+<b>Step 1: Create Webhook in Discord</b><br>
+1. Open Discord and go to your server<br>
+2. Right-click the channel you want alerts in<br>
+3. Click "Edit Channel" → "Integrations"<br>
+4. Click "Webhooks" → "New Webhook"<br>
+5. Give it a name (e.g., "Raid Alert Bot")<br>
+6. Click "Copy Webhook URL"<br><br>
+
+<b>Step 2: Configure Plugin</b><br>
+1. Paste webhook URL in the field above<br>
+2. Customize bot name (optional)<br>
+3. Edit message template<br>
+4. Click "Send Test Message" to verify<br><br>
+
+<b>Message Template:</b><br>
+• Use <b>{telegram_message}</b> to include the raid alert<br>
+• Discord supports markdown formatting:<br>
+&nbsp;&nbsp;• <b>**bold text**</b><br>
+&nbsp;&nbsp;• <i>*italic text*</i><br>
+&nbsp;&nbsp;• <u>__underline__</u><br>
+&nbsp;&nbsp;• <code>`code`</code><br><br>
+
+<b>Mentions:</b><br>
+• <b>@everyone</b> - Notify all server members<br>
+• <b>Role mention</b> - Get role ID by typing \\@RoleName in Discord<br>
+&nbsp;&nbsp;(enable Developer Mode in Discord settings first)<br><br>
+
+<b>Example Messages:</b><br>
+• Simple: 🚨 RAID ALERT! {telegram_message}<br>
+• Formatted: **⚠️ URGENT**\\n{telegram_message}\\n@everyone<br>
+• Custom: 🔴 Base under attack! Get online NOW!<br><br>
+
+<b>Tips:</b><br>
+• Test first to avoid spamming<br>
+• Don't share webhook URL publicly<br>
+• Create separate webhooks for different channels"""
+        
+        msg = QMessageBox()
+        msg.setWindowTitle("Discord Webhook Help")
+        msg.setTextFormat(Qt.RichText)
+        msg.setText(help_text)
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: #1e1e1e;
+            }
+            QLabel {
+                color: #d4d4d4;
+                min-width: 500px;
+            }
+            QPushButton {
+                background-color: #5865F2;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 20px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #4752C4;
+            }
+        """)
+        msg.exec()
     
     def get_groupbox_style(self):
         return """

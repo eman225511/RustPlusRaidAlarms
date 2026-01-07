@@ -87,10 +87,34 @@ class Plugin(PluginBase):
         header_layout = QVBoxLayout(header_frame)
         header_layout.setContentsMargins(16, 16, 16, 16)
 
+        # Title row with help button
+        title_row = QHBoxLayout()
+        
         header = QLabel("LED Controller")
         header.setFont(QFont("Segoe UI", 22, QFont.Bold))
         header.setStyleSheet("color: #ffffff;")
-        header_layout.addWidget(header)
+        title_row.addWidget(header)
+        
+        help_btn = QPushButton("❓")
+        help_btn.setFont(QFont("Segoe UI", 14))
+        help_btn.setMaximumWidth(35)
+        help_btn.setMaximumHeight(35)
+        help_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d30;
+                border: 1px solid #3e3e42;
+                border-radius: 17px;
+                color: #d4d4d4;
+            }
+            QPushButton:hover {
+                background-color: #3e3e42;
+            }
+        """)
+        help_btn.clicked.connect(self.show_help)
+        title_row.addWidget(help_btn)
+        title_row.addStretch()
+        
+        header_layout.addLayout(title_row)
 
         subtitle = QLabel("Trigger LED actions on raid alarms")
         subtitle.setFont(QFont("Segoe UI", 11))
@@ -570,6 +594,68 @@ class Plugin(PluginBase):
 
     def on_telegram_message(self, message: str):
         self.trigger_led_action()
+    
+    def show_help(self):
+        """Show setup guide"""
+        from PySide6.QtWidgets import QMessageBox
+        
+        help_text = """<b>LED Controller Setup Guide</b><br><br>
+        
+<b>WLED Setup:</b><br>
+1. Install WLED on ESP8266/ESP32<br>
+2. Connect to your WiFi network<br>
+3. Find device IP (check router or WLED app)<br>
+4. Enter IP in 'WLED IP Address' field<br>
+5. Test connection<br><br>
+
+<b>Govee Setup:</b><br>
+1. Get API key from Govee Home app:<br>
+   &nbsp;&nbsp;• Open app → Settings → About Us<br>
+   &nbsp;&nbsp;• Tap "Apply for API Key"<br>
+2. Click "Scan Devices" to find your lights<br>
+3. Select device from dropdown<br>
+4. Test connection<br><br>
+
+<b>Philips Hue Setup:</b><br>
+1. Find bridge IP (check Hue app or router)<br>
+2. Press button on Hue bridge<br>
+3. Click "Create User" within 30 seconds<br>
+4. Username will be auto-filled<br>
+5. Test connection<br><br>
+
+<b>Actions:</b><br>
+• <b>Turn On/Off</b> - Simple power control<br>
+• <b>Set Color</b> - Choose custom color<br>
+• <b>Set Effect</b> - WLED animation (0-255)<br>
+• <b>Run Preset</b> - WLED saved preset (0-255)<br>
+• <b>Run Scene</b> - Govee scene (0-50)<br>
+• <b>Set Brightness</b> - 0-100%"""
+        
+        msg = QMessageBox()
+        msg.setWindowTitle("LED Controller Help")
+        msg.setTextFormat(Qt.RichText)
+        msg.setText(help_text)
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: #1e1e1e;
+            }
+            QLabel {
+                color: #d4d4d4;
+                min-width: 500px;
+            }
+            QPushButton {
+                background-color: #0e639c;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 20px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #1177bb;
+            }
+        """)
+        msg.exec()
 
     # ------------------------------------------------------------------
     # Styling

@@ -59,10 +59,34 @@ class Plugin(PluginBase):
         header_layout = QVBoxLayout(header_frame)
         header_layout.setContentsMargins(16, 16, 16, 16)
 
+        # Title row with help button
+        title_row = QHBoxLayout()
+        
         header = QLabel("📞 Twilio Caller")
         header.setFont(QFont("Segoe UI", 22, QFont.Bold))
         header.setStyleSheet("color: #ffffff;")
-        header_layout.addWidget(header)
+        title_row.addWidget(header)
+        
+        help_btn = QPushButton("❓")
+        help_btn.setFont(QFont("Segoe UI", 14))
+        help_btn.setMaximumWidth(35)
+        help_btn.setMaximumHeight(35)
+        help_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2d2d30;
+                border: 1px solid #3e3e42;
+                border-radius: 17px;
+                color: #d4d4d4;
+            }
+            QPushButton:hover {
+                background-color: #3e3e42;
+            }
+        """)
+        help_btn.clicked.connect(self.show_help)
+        title_row.addWidget(help_btn)
+        title_row.addStretch()
+        
+        header_layout.addLayout(title_row)
 
         subtitle = QLabel("Call multiple phone numbers when raid alarms are triggered")
         subtitle.setFont(QFont("Segoe UI", 11))
@@ -355,6 +379,71 @@ class Plugin(PluginBase):
         """Called when a Telegram message is received - trigger calls"""
         print(f"[Twilio] Raid alert received, making calls...")
         self.make_calls()
+    
+    def show_help(self):
+        """Show setup guide"""
+        help_text = """<b>Twilio Setup Guide</b><br><br>
+
+<b>Step 1: Create Twilio Account</b><br>
+1. Go to <a href="https://www.twilio.com/try-twilio">twilio.com/try-twilio</a><br>
+2. Sign up for free trial ($15 credit)<br>
+3. Verify your email and phone number<br><br>
+
+<b>Step 2: Get Credentials</b><br>
+1. Go to Twilio Console Dashboard<br>
+2. Find "Account SID" - copy and paste it<br>
+3. Find "Auth Token" - click "Show" then copy<br><br>
+
+<b>Step 3: Get Phone Number</b><br>
+1. In Twilio Console, click "Get a Trial Number"<br>
+2. Accept the suggested number<br>
+3. Copy this number (format: +1XXXXXXXXXX)<br><br>
+
+<b>Step 4: Add Numbers to Call</b><br>
+1. Enter phone numbers one per line<br>
+2. Must use E.164 format: +1XXXXXXXXXX<br>
+3. <b>Trial accounts can only call verified numbers!</b><br>
+4. Verify numbers at: Console → Phone Numbers → Verified Caller IDs<br><br>
+
+<b>Step 5: Customize Message</b><br>
+1. Edit the call message text<br>
+2. Keep it short and clear<br>
+3. Test with one number first<br><br>
+
+<b>Trial Limitations:</b><br>
+• Can only call verified numbers<br>
+• Call starts with "You have a call from a Twilio trial account"<br>
+• Upgrade to remove restrictions<br><br>
+
+<b>Costs (Paid Account):</b><br>
+• ~$1/month per phone number<br>
+• ~$0.013 per minute of calls"""
+        
+        msg = QMessageBox()
+        msg.setWindowTitle("Twilio Caller Help")
+        msg.setTextFormat(Qt.RichText)
+        msg.setText(help_text)
+        msg.setStyleSheet("""
+            QMessageBox {
+                background-color: #1e1e1e;
+            }
+            QLabel {
+                color: #d4d4d4;
+                min-width: 500px;
+            }
+            QPushButton {
+                background-color: #0e639c;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 20px;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #1177bb;
+            }
+        """)
+        msg.exec()
 
     def get_groupbox_style(self):
         return """
