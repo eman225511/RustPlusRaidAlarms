@@ -227,7 +227,10 @@ class Plugin(PluginBase):
     
     def on_telegram_message(self, message: str):
         """Called when Telegram message received - launch Rust"""
+        print(f"[Rust Auto-Connect] on_telegram_message called. Enabled: {self.enabled}, Message: {message}")
+        
         if not self.enabled:
+            print("[Rust Auto-Connect] Plugin is disabled, skipping")
             return
         
         print(f"[Rust Auto-Connect] Raid alert received! Launching Rust...")
@@ -238,12 +241,14 @@ class Plugin(PluginBase):
         
         try:
             self.launch_rust()
-            self.status_label.setText(f"🚀 Launched Rust at {self.server_ip}:{self.server_port}")
-            self.status_label.setStyleSheet("color: #44ff44; padding: 10px;")
+            if hasattr(self, 'status_label') and self.status_label:
+                self.status_label.setText(f"🚀 Launched Rust at {self.server_ip}:{self.server_port}")
+                self.status_label.setStyleSheet("color: #44ff44; padding: 10px;")
         except Exception as e:
             print(f"[Rust Auto-Connect] Error launching Rust: {e}")
-            self.status_label.setText(f"❌ Launch failed")
-            self.status_label.setStyleSheet("color: #ff4444; padding: 10px;")
+            if hasattr(self, 'status_label') and self.status_label:
+                self.status_label.setText(f"❌ Launch failed")
+                self.status_label.setStyleSheet("color: #ff4444; padding: 10px;")
     
     def on_enable(self):
         """Called when plugin is enabled"""
