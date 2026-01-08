@@ -706,7 +706,7 @@ class MainWindow(QMainWindow):
             
             # Enable/disable checkbox
             enable_checkbox = QCheckBox()
-            enable_checkbox.setChecked(self.config.get(f"plugin_enabled_{plugin_name}", True))
+            enable_checkbox.setChecked(self.config.get(f"plugin_enabled_{plugin_name}", False))
             enable_checkbox.setToolTip(f"Enable/disable {plugin_name}")
             enable_checkbox.setStyleSheet("""
                 QCheckBox::indicator {
@@ -745,6 +745,15 @@ class MainWindow(QMainWindow):
             
             # Store enabled state
             self.plugin_enabled[plugin_name] = enable_checkbox.isChecked()
+            
+            # Initialize plugin with correct enabled state
+            try:
+                if enable_checkbox.isChecked():
+                    plugin.on_enable()
+                else:
+                    plugin.on_disable()
+            except Exception as e:
+                self.log(f"⚠ Error initializing {plugin_name} state: {str(e)}")
 
             self.plugins.append(plugin)
             self.plugin_widgets[plugin.get_name()] = plugin_widget
