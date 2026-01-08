@@ -706,7 +706,12 @@ class MainWindow(QMainWindow):
             
             # Enable/disable checkbox
             enable_checkbox = QCheckBox()
-            enable_checkbox.setChecked(self.config.get(f"plugin_enabled_{plugin_name}", False))
+            # If plugin_enabled key exists in config, use that value; otherwise default to False
+            config_key = f"plugin_enabled_{plugin_name}"
+            if config_key in self.config:
+                enable_checkbox.setChecked(self.config[config_key])
+            else:
+                enable_checkbox.setChecked(False)
             enable_checkbox.setToolTip(f"Enable/disable {plugin_name}")
             enable_checkbox.setStyleSheet("""
                 QCheckBox::indicator {
