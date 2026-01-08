@@ -104,6 +104,7 @@ class TelegramService(QThread):
     def poll_messages(self, chat_id):
         """Poll for new messages"""
         last_update_id = 0
+        first_run = True  # Flag to skip initial old messages
         
         while self.running:
             try:
@@ -118,7 +119,25 @@ class TelegramService(QThread):
                     )
                 )
                 
-                # Process updates
+                # On first run, just mark all existing messages as seen
+                if first_run and updates:
+                    print(f"[Telegram] First run - marking {len(updates)} existing messages as seen")
+                    for update in updates:
+                        last_update_id = update.update_id
+                        
+                        # Update last_message_id to skip old messages
+                        if update.message and str(update.message.chat_id) == str(chat_id):
+                            self.config["last_message_id"] = update.message.message_id
+                        elif update.channel_post and str(update.channel_post.chat_id) == str(chat_id):
+                            self.config["last_message_id"] = update.channel_post.message_id
+                    
+                    first_run = False
+                    print("[Telegram] Ready - will only process new messages from now on")
+                    continue
+                
+                first_run = False  # Set to False after first iteration
+                
+                # Process updates normally
                 for update in updates:
                     last_update_id = update.update_id
                     
