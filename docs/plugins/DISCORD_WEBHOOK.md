@@ -1,13 +1,35 @@
+<div align="center">
+
 # 💬 Discord Webhook Plugin
 
-Post raid alerts to your Discord server instantly! Notify your team with @mentions, custom messages, and formatted alerts.
+**Post Raid Alerts to Discord**
 
-## Features
-- **Instant Notifications** - Alerts appear in Discord immediately
-- **@everyone Mentions** - Wake up your whole server
-- **Role Mentions** - Ping specific groups (e.g., @Raiders, @PvP Team)
-- **Custom Messages** - Template system with markdown support
-- **Test Button** - Verify setup before relying on it
+[![Discord](https://img.shields.io/badge/Discord-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.com)
+[![Webhooks](https://img.shields.io/badge/Webhooks-Supported-brightgreen?style=flat)](https://discord.com/developers/docs/resources/webhook)
+[![Instant](https://img.shields.io/badge/Notifications-Instant-blue?style=flat)](https://discord.com)
+
+Post raid alerts to your Discord server with @mentions, custom messages, and formatted alerts!
+
+</div>
+
+---
+
+## ✨ Features
+
+<details open>
+<summary><b>What this plugin can do</b></summary>
+
+| Feature | Description |
+|---------|-------------|
+| ⚡ **Instant Notifications** | Alerts appear in Discord immediately |
+| 📢 **@everyone Mentions** | Wake up your whole server |
+| 👥 **Role Mentions** | Ping specific groups (@Raiders, @PvP Team) |
+| 📝 **Custom Messages** | Template system with markdown support |
+| 🧪 **Test Button** | Verify setup before relying on it |
+
+</details>
+
+---
 
 ## Setup
 
@@ -351,3 +373,13 @@ This would require a separate plugin and more setup (future idea!).
 - **Discord Webhook Docs**: [discord.com/developers/docs/resources/webhook](https://discord.com/developers/docs/resources/webhook)
 - **Markdown Guide**: [discord.com/developers/docs/reference#message-formatting](https://discord.com/developers/docs/reference#message-formatting)
 - **Plugin Issues**: File a GitHub issue with error messages
+
+---
+
+<div align="center">
+
+**[⬅️ Back to Main README](../../README.md)** • **[📖 All Plugin Guides](../../README.md#-plugins)**
+
+Made with ❤️ for the Rust community
+
+</div>

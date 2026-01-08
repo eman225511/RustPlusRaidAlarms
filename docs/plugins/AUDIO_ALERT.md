@@ -1,180 +1,249 @@
+<div align="center">
+
 # 🔊 Audio Alert Plugin
 
-Play custom sound files on any audio output device when you get raided. Wake up to your favorite alarm sound, scare your cat, or blast air horns through your speakers!
+**Custom Sound Alerts for Raids**
 
-## Features
-- **Custom Sounds** - Use any MP3, WAV, OGG, or FLAC file
-- **Multiple Files** - Add unlimited audio alerts
-- **Device Selection** - Play on specific speakers/headphones
-- **Volume Control** - Adjust from 0-100%
-- **Test Playback** - Preview sounds before enabling
+[![MP3](https://img.shields.io/badge/MP3-Supported-blue?style=flat)](https://en.wikipedia.org/wiki/MP3)
+[![WAV](https://img.shields.io/badge/WAV-Supported-green?style=flat)](https://en.wikipedia.org/wiki/WAV)
+[![OGG](https://img.shields.io/badge/OGG-Supported-orange?style=flat)](https://en.wikipedia.org/wiki/Ogg)
+[![FLAC](https://img.shields.io/badge/FLAC-Supported-purple?style=flat)](https://en.wikipedia.org/wiki/FLAC)
 
-## Setup
+Play custom sound files on any audio device when you get raided!
 
-### Step 1: Prepare Your Audio Files
+</div>
 
-1. Choose or create audio files:
-   - **Alarm sounds**: Air horn, siren, klaxon
-   - **Voice alerts**: Record yourself saying "RAID ALERT!"
-   - **Music**: Heavy metal, pump-up songs, memes
-   - **Game sounds**: Rust gunfire, explosion SFX
+---
 
-2. Supported formats:
-   - ✅ MP3 (most common)
-   - ✅ WAV (best quality)
-   - ✅ OGG (smaller file size)
-   - ✅ FLAC (lossless)
+## ✨ Features
 
-3. Save files somewhere accessible:
-   - Example: `C:\Users\YourName\Music\Alarms\`
-   - Or keep them in the project: `RustPlusRaidAlarms\sounds\`
+<details open>
+<summary><b>What this plugin can do</b></summary>
 
-### Step 2: Configure Audio Devices
+| Feature | Description |
+|---------|-------------|
+| 🎵 **Custom Sounds** | Use any MP3, WAV, OGG, or FLAC file |
+| 📦 **Multiple Files** | Add unlimited audio alerts |
+| 🔈 **Device Selection** | Play on specific speakers/headphones |
+| 🔉 **Volume Control** | Adjust from 0-100% |
+| ▶️ **Test Playback** | Preview sounds before enabling |
 
-1. Open RustPlus Raid Alarms
-2. Go to **Audio Alert** plugin tab
-3. Click **Scan Audio Devices** button
-4. Check the devices you want to use:
-   - ✅ Speakers - Main alert
-   - ✅ Headphones - Personal notification
-   - ✅ Virtual Cable - Stream alert (if you're streaming)
+</details>
 
-**Tip**: You can select multiple devices to play on all of them simultaneously!
+---
 
-### Step 3: Add Audio Files
+## 🛠️ Setup
 
-1. Click **Browse...** next to an empty file path
+<details open>
+<summary><b>5-step configuration guide</b></summary>
+
+### 1️⃣ Prepare Your Audio Files
+
+**Choose or create audio files:**
+
+| Category | Examples | Purpose |
+|----------|----------|---------|
+| 🚨 **Alarm Sounds** | Air horn, siren, klaxon | Wake-up alerts |
+| 🎤 **Voice Alerts** | "RAID ALERT!", "Get online NOW!" | Personal messages |
+| 🎵 **Music** | Heavy metal, pump-up songs | Motivational |
+| 🎮 **Game SFX** | Rust gunfire, explosions | Immersive |
+| 😂 **Memes** | "Oh no no no", Inception horn | Entertainment |
+
+**Supported formats:**
+
+| Format | Quality | File Size | Best For |
+|--------|---------|-----------|----------|
+| ✅ **MP3** | Good | Small | Most common, widely compatible |
+| ✅ **WAV** | Excellent | Large | Best quality, no compression |
+| ✅ **OGG** | Good | Smaller | Compressed, efficient |
+| ✅ **FLAC** | Lossless | Medium | Audiophile-grade quality |
+
+**Save files somewhere accessible:**
+- 📁 Example: `C:\Users\YourName\Music\Alarms\`
+- 📁 Or in project: `RustPlusRaidAlarms\sounds\`
+
+---
+
+### 2️⃣ Configure Audio Devices
+
+1. Open **RustPlus Raid Alarms**
+2. Go to **Audio Alert** plugin tab  
+3. Click **🔍 Scan Audio Devices** button
+4. **Check the devices** you want to use:
+
+| Device Type | Use Case |
+|-------------|----------|
+| 🔊 **Speakers** | Main alert (wake up whole room) |
+| 🎧 **Headphones** | Personal notification |
+| 📡 **Virtual Cable** | Stream alert (if streaming) |
+| 📺 **HDMI/Monitor** | TV/monitor speakers |
+| 🔵 **Bluetooth** | Wireless speakers |
+
+> 💡 **Multi-device**: Select multiple devices to play on all simultaneously!
+
+---
+
+### 3️⃣ Add Audio Files
+
+1. Click **📁 Browse...** next to an empty file path
 2. Navigate to your audio file
-3. File path will be auto-filled
-4. Repeat for additional files (up to 5 per set)
+3. File path auto-fills
+4. Repeat for additional files (up to 5+ per set)
 
-**Quick Tip**: Copy-paste file paths if you know them:
+**Quick Tip**: Copy-paste paths if you know them:
 ```
 C:\Users\YourName\Music\Alarms\airhorn.mp3
 ```
 
-### Step 4: Set Volume
+---
 
-1. Use the **slider** for quick adjustments (0-100%)
-2. Or type a **specific number** in the box
-3. Volume applies to all audio files
+### 4️⃣ Set Volume
 
-**Recommended volumes**:
-- **50-70%**: Noticeable but not jarring
-- **80-100%**: Wake-you-up loud
-- **100%**: MAXIMUM ALERT 🚨
+**Slider**: Drag for quick adjustments (0-100%)  
+**Number box**: Type specific value
 
-### Step 5: Test It
+| Volume | Effect |
+|--------|--------|
+| 🔉 **50-70%** | Noticeable but not jarring |
+| 🔊 **80-100%** | Wake-you-up loud |
+| 📢 **100%** | MAXIMUM ALERT 🚨 |
 
-1. Click **▶ Play Audio** button
-2. All configured files will play on all selected devices
+> ⚠️ Volume applies to **all** audio files
+
+---
+
+### 5️⃣ Test It
+
+1. Click **▶️ Play Audio** button
+2. All files play on all selected devices
 3. Adjust volume/devices as needed
-4. When happy, enable the plugin checkbox!
+4. ✅ When happy, enable the plugin checkbox!
 
-## How It Works
+</details>
+
+---
+
+## ⚙️ How It Works
+
+<details>
+<summary><b>Behind the scenes</b></summary>
 
 When a raid alert is received:
-1. Plugin checks if it's enabled
-2. Validates audio files exist
-3. Starts a background thread for each file
-4. Plays all files simultaneously on selected devices
-5. Automatically stops when finished
 
-**Plays in background** - Won't freeze the app during playback!
+```
+1. ✅ Plugin checks if enabled
+2. 📁 Validates audio files exist
+3. 🧵 Starts background thread per file
+4. 🔊 Plays all files simultaneously on selected devices
+5. ⏹️ Auto-stops when finished
+```
 
-## Audio Device Selection
+**Background playback** - Won't freeze the app!
 
-### What are these devices?
+</details>
 
-- **Physical speakers/headphones**: Your actual hardware
-- **Virtual audio devices**: Software mixers (VoiceMeeter, VB-Cable, etc.)
-- **HDMI/DisplayPort audio**: Monitor speakers
-- **Bluetooth devices**: Wireless speakers/headphones
+---
 
-### Duplicate devices?
+## 🔧 Audio Device Selection
 
-Some devices appear multiple times with different drivers (MME, DirectSound, WASAPI). The plugin automatically filters duplicates by name.
+<details>
+<summary><b>Understanding audio devices</b></summary>
 
-### Can't find your device?
+### 📋 Device Types
 
-**Refresh the list:**
-1. Click **Scan Audio Devices** again
-2. Make sure the device is plugged in and powered on
-3. Check Windows Sound Settings to see if Windows detects it
+| Device | Description | Example |
+|--------|-------------|---------|
+| 🔊 **Physical speakers** | Actual hardware | Logitech, JBL |
+| 🎧 **Headphones** | Wired/wireless audio | HyperX, Sony |
+| 📺 **HDMI/DisplayPort** | Monitor speakers | Dell monitor audio |
+| 🔵 **Bluetooth** | Wireless devices | AirPods, Bose |
+| 📡 **Virtual devices** | Software mixers | VoiceMeeter, VB-Cable |
 
-**Device not showing?**
-- Update audio drivers
-- Restart RustPlus Raid Alarms
-- Restart your computer (for new Bluetooth devices)
+### 🔄 Duplicate Devices
 
-## Troubleshooting
+Some devices appear multiple times with different drivers (MME, DirectSound, WASAPI).  
+**The plugin automatically filters duplicates by name.**
 
-### No sound plays
+### 🔍 Can't Find Your Device?
 
-**Check device selection:**
-- At least one device must be checked
-- Click **Scan Audio Devices** if list is empty
+| Issue | Solution |
+|-------|----------|
+| 📋 Empty list | Click **🔍 Scan Audio Devices** again |
+| 🔌 Not detected | Ensure device is plugged in and powered on |
+| 🪟 Windows missing it | Check Windows Sound Settings |
+| 🔄 Still missing | Update audio drivers<br>Restart app<br>Restart computer (for Bluetooth) |
 
-**Check audio files:**
-- Make sure file paths are correct
-- Files must exist at the specified location
-- Try playing the file in VLC/Windows Media Player first
+</details>
 
-**Check volume:**
-- Plugin volume must be > 0%
-- Windows volume must be > 0%
-- Device must not be muted
+---
 
-### "Error: File not found"
+## 🔧 Troubleshooting
 
-**File path changed:**
-- Did you move/rename/delete the audio file?
-- Browse to the new location
+<details>
+<summary><b>Common issues and solutions</b></summary>
 
-**Wrong path format:**
-- Windows: Use backslashes `C:\Users\...`
-- Or forward slashes work too: `C:/Users/...`
+### 🔇 No Sound Plays
 
-### "Error scanning devices"
+| Cause | Fix |
+|-------|-----|
+| ☑️ **No device selected** | At least one device must be checked<br>Click **🔍 Scan Audio Devices** if list empty |
+| 📁 **Missing files** | Verify file paths are correct<br>Files must exist at specified location<br>Test in VLC/Windows Media Player first |
+| 🔊 **Volume zero** | Plugin volume must be > 0%<br>Windows volume must be > 0%<br>Device must not be muted |
+
+---
+
+### 📂 "Error: File not found"
+
+| Problem | Solution |
+|---------|----------|
+| 📁 **File moved** | Browse to new location |
+| ✏️ **Wrong path** | Windows: Use `C:\Users\...` (backslashes)<br>Or forward slashes: `C:/Users/...` |
+
+---
+
+### 🔍 "Error scanning devices"
 
 **Restart the plugin:**
 1. Disable the plugin checkbox
 2. Wait 2 seconds
 3. Enable it again
-4. Click **Scan Audio Devices**
+4. Click **🔍 Scan Audio Devices**
 
 **Still broken?**
-- Check if other apps can use audio (Spotify, YouTube, etc.)
+- Check if other apps can use audio (Spotify, YouTube)
 - Restart RustPlus Raid Alarms
-- Reinstall `pygame` and `sounddevice`: `pip install --upgrade pygame sounddevice`
+- Reinstall packages: `pip install --upgrade pygame sounddevice`
 
-### Sound plays but is distorted/crackling
+---
 
-**Lower the volume:**
-- Try 70% instead of 100%
-- Your speakers might be clipping
+### 📢 Sound Distorted/Crackling
 
-**Check file quality:**
-- Low bitrate MP3s can sound bad at high volume
-- Use WAV or high-quality MP3 (320kbps)
+| Issue | Fix |
+|-------|-----|
+| 🔊 **Too loud** | Lower volume (try 70% instead of 100%)<br>Speakers might be clipping |
+| 🎵 **Low quality file** | Use WAV or high-quality MP3 (320kbps) |
+| 📡 **Too many devices** | Playing on 5+ devices can cause issues<br>Try using fewer devices |
 
-**Too many devices?**
-- Playing on 5+ devices simultaneously can cause issues
-- Try using fewer devices
+---
 
-### Audio keeps playing after raid ends
+### 🔁 Audio Keeps Playing After Raid Ends
 
-**Background thread issue:**
-- Close and reopen RustPlus Raid Alarms
-- The plugin will stop all playback on shutdown
+| Cause | Fix |
+|-------|-----|
+| 🧵 **Background thread** | Close and reopen RustPlus Raid Alarms<br>Plugin stops all playback on shutdown |
+| 🔂 **File looping** | Check file metadata for loop markers<br>Re-export file with no loop |
 
-**File is looping:**
-- Make sure your audio file isn't set to loop in its metadata
-- Re-export the file with no loop markers
+</details>
 
-## File Organization Tips
+---
 
-### Recommended Folder Structure
+## 📁 File Organization Tips
+
+<details>
+<summary><b>Recommended folder structure and resources</b></summary>
+
+### 🗂️ Folder Structure
+
 ```
 RustPlusRaidAlarms/
 ├── sounds/
@@ -190,23 +259,35 @@ RustPlusRaidAlarms/
 │       └── ohdear.wav
 ```
 
-### Where to Find Sounds
+### 🌐 Free Sound Libraries
 
-**Free sound libraries:**
-- [Freesound.org](https://freesound.org/) - Huge library of CC-licensed sounds
-- [Zapsplat.com](https://www.zapsplat.com/) - Free SFX and music
-- [Mixkit.co](https://mixkit.co/free-sound-effects/) - High-quality free sounds
+| Resource | Link | Description |
+|----------|------|-------------|
+| 🔊 **Freesound** | [freesound.org](https://freesound.org/) | Huge library of CC-licensed sounds |
+| ⚡ **Zapsplat** | [zapsplat.com](https://www.zapsplat.com/) | Free SFX and music |
+| 🎬 **Mixkit** | [mixkit.co](https://mixkit.co/free-sound-effects/) | High-quality free sounds |
 
-**Record your own:**
-- Windows Voice Recorder (built-in)
-- Audacity (free, open source)
-- Your phone's voice recorder
+### 🎙️ Record Your Own
 
-**Convert formats:**
-- Use [Audacity](https://www.audacityteam.org/) to convert between formats
-- Or [Online-Convert.com](https://audio.online-convert.com/) for quick conversions
+| Tool | Platform | Cost |
+|------|----------|------|
+| 🪟 **Voice Recorder** | Windows built-in | Free |
+| 🎵 **Audacity** | All platforms | Free, open source |
+| 📱 **Phone recorder** | iOS/Android | Built-in |
 
-## Configuration
+### 🔄 Convert Formats
+
+- 🎵 [Audacity](https://www.audacityteam.org/) - Convert between formats
+- 🌐 [Online-Convert.com](https://audio.online-convert.com/) - Quick conversions
+
+</details>
+
+---
+
+## 📝 Configuration
+
+<details>
+<summary><b>Config file format</b></summary>
 
 Plugin settings saved in `config.json`:
 
@@ -225,36 +306,51 @@ Plugin settings saved in `config.json`:
 }
 ```
 
-## Advanced: Simultaneous Playback
+</details>
 
-The plugin plays all audio files **at the same time** by default. 
+---
 
-Want them to play **one after another** instead? Edit the plugin code:
+## 🚀 Advanced Features
+
+<details>
+<summary><b>Sequential playback and performance notes</b></summary>
+
+### 🔄 Sequential Playback
+
+The plugin plays all files **simultaneously** by default.
+
+Want **one after another** instead? Edit `plugins/audio_alert.py`:
 
 ```python
 # In on_telegram_message() method
 for audio_file in self.audio_files:
     thread = AudioPlaybackThread(audio_file, self.audio_volume, device_indices)
     thread.start()
-    thread.wait()  # Add this line to wait for completion
+    thread.wait()  # ⬅️ Add this line to wait for completion
 ```
 
-## Performance Notes
+### 📊 Performance Notes
 
-- **Memory usage**: ~10-50MB per audio file loaded
-- **CPU usage**: Minimal (< 5% during playback)
-- **Multiple files**: No significant performance impact
+| Metric | Usage |
+|--------|-------|
+| 💾 **Memory** | ~10-50MB per audio file |
+| ⚡ **CPU** | < 5% during playback |
+| 📁 **Multiple files** | No significant impact |
 
-## Privacy & Security
+### 🔒 Privacy & Security
 
-- **No network access** - All audio plays locally
-- **No telemetry** - Plugin doesn't track usage
-- **Config file** contains file paths only (safe to share)
+- 🌐 **No network access** - All audio plays locally
+- 🔍 **No telemetry** - Plugin doesn't track usage
+- 📄 **Config file** - Contains file paths only (safe to share)
 
-## Coming Soon (Future Ideas)
+</details>
 
-- **Random playback** - Play a random file from a list
-- **Fade in/out** - Smooth volume transitions
-- **Playlist support** - Shuffle through multiple sounds
-- **Spatial audio** - Pan sound left/right for dramatic effect
-- **Voice changer** - Pitch shift for creepy alerts
+---
+
+<div align="center">
+
+**[⬅️ Back to Main README](../../README.md)** • **[📖 All Plugin Guides](../../README.md#-plugins)**
+
+Made with ❤️ for the Rust community
+
+</div>

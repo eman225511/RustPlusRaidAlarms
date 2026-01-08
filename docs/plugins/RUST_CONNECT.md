@@ -1,12 +1,34 @@
+<div align="center">
+
 # 🎮 Rust Auto-Connect Plugin
 
-Automatically launch Rust and connect to your server when a raid alert is received. Never waste time loading the game manually—get straight into the action!
+**Instantly Join Your Server on Raid Alerts**
 
-## Features
-- **Instant Launch** - Opens Rust via Steam protocol the moment you get raided
-- **Auto-Connect** - Joins your server automatically, no manual clicking
-- **No Steam Path Needed** - Works as long as Steam is installed
-- **Test Button** - Verify it works before relying on it
+[![Steam](https://img.shields.io/badge/Steam-000000?style=flat&logo=steam&logoColor=white)](https://store.steampowered.com)
+[![Rust](https://img.shields.io/badge/Rust-CE422B?style=flat&logo=rust&logoColor=white)](https://rust.facepunch.com)
+[![Auto Connect](https://img.shields.io/badge/Auto_Connect-Instant-brightgreen?style=flat)](https://steamcommunity.com)
+
+Automatically launch Rust and connect to your server when raided. Get straight into the action!
+
+</div>
+
+---
+
+## ✨ Features
+
+<details open>
+<summary><b>What this plugin can do</b></summary>
+
+| Feature | Description |
+|---------|-------------|
+| ⚡ **Instant Launch** | Opens Rust via Steam the moment you get raided |
+| 🔗 **Auto-Connect** | Joins your server automatically, no clicking |
+| 🛠️ **No Steam Path Needed** | Works as long as Steam is installed |
+| 🧪 **Test Button** | Verify it works before relying on it |
+
+</details>
+
+---
 
 ## Setup
 
@@ -121,3 +143,13 @@ You can edit these manually if needed (close the app first).
 - Server IP and port are **not sensitive** - they're public info
 - No passwords or credentials are stored
 - The plugin only launches Rust, doesn't modify game files
+
+---
+
+<div align="center">
+
+**[⬅️ Back to Main README](../../README.md)** • **[📖 All Plugin Guides](../../README.md#-plugins)**
+
+Made with ❤️ for the Rust community
+
+</div>
