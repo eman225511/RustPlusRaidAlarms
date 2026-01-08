@@ -97,8 +97,20 @@ class TelegramService(QThread):
             self.status_changed.emit(f"❌ Error: {error_msg[:50]} - retrying in 10s...", "#ff4444")
             self.retry_connection(10)
         finally:
+            # Cleanup event loop
             if self.loop:
-                self.loop.close()
+                try:
+                    # Cancel all pending tasks
+                    pending = asyncio.all_tasks(self.loop)
+                    for task in pending:
+                        task.cancel()
+                    # Run the loop one more time to process cancellations
+                    if pending:
+                        self.loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                except Exception as e:
+                    print(f"[Telegram] Error during loop cleanup: {e}")
+                finally:
+                    self.loop.close()
             self.running = False
     
     def poll_messages(self, chat_id):
@@ -180,9 +192,15 @@ class TelegramService(QThread):
         """Stop the Telegram service"""
         print("[Telegram] Stopping service...")
         self.running = False
+        
+        # Close the event loop if it exists
+        if self.loop and self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+        
         if self.isRunning():
             self.quit()
-            self.wait(2000)
+            self.wait(5000)  # Wait up to 5 seconds for thread to finish
+        
         self.status_changed.emit("⏸ Stopped", "#888888")
     
     def retry_connection(self, delay_seconds):

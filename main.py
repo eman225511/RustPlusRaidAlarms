@@ -7,13 +7,17 @@ import sys
 import json
 import importlib.util
 from pathlib import Path
+from base64 import urlsafe_b64encode, urlsafe_b64decode
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QLabel, QPushButton, QTabWidget,
                                QTextEdit, QFrame, QScrollArea, QSplitter,
                                QCheckBox, QLineEdit, QSpinBox, QDialog,
                                QFormLayout, QDialogButtonBox, QSizePolicy)
 from PySide6.QtCore import Qt, Signal, QTimer, QPoint, QMimeData, QSize
-from PySide6.QtGui import QFont, QColor, QPalette, QDrag
+from PySide6.QtGui import QFont, QColor, QPalette, QDrag, QCursor
 
 from telegram_service import TelegramService
 from plugin_base import PluginBase
@@ -240,6 +244,16 @@ class MainWindow(QMainWindow):
         pill_row.addWidget(self.pill_poll)
 
         pill_row.addStretch()
+
+        # Clan Codes menu button (small, top-right)
+        clan_menu_btn = QPushButton("👥 Clan Codes")
+        clan_menu_btn.setFont(QFont("Segoe UI", 9))
+        clan_menu_btn.setMinimumHeight(28)
+        clan_menu_btn.setMaximumWidth(120)
+        clan_menu_btn.setStyleSheet(self.get_button_style("#6c42f5"))
+        clan_menu_btn.clicked.connect(self.show_clan_menu)
+        pill_row.addWidget(clan_menu_btn)
+
         hero_layout.addLayout(pill_row)
 
         layout.addWidget(hero)
@@ -824,6 +838,328 @@ class MainWindow(QMainWindow):
             self.telegram_service.stop()
             QTimer.singleShot(500, self.telegram_service.start)
     
+    def generate_clan_key(self, password: str) -> bytes:
+        """Generate encryption key from password using PBKDF2"""
+        # Use a fixed salt for clan codes so same password = same key
+        salt = b'RustPlusRaidAlarms-Clan-Salt-v1'
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        return urlsafe_b64encode(kdf.derive(password.encode()))
+    
+    def show_clan_menu(self):
+        """Show clan code menu with export/import options"""
+        from PySide6.QtWidgets import QMenu
+        
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                border: 1px solid #3e3e42;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 8px 24px;
+                background-color: transparent;
+            }
+            QMenu::item:selected {
+                background-color: #094771;
+            }
+        """)
+        
+        export_action = menu.addAction("📤 Export Clan Code")
+        export_action.triggered.connect(self.export_clan_code)
+        
+        import_action = menu.addAction("📥 Import Clan Code")
+        import_action.triggered.connect(self.import_clan_code)
+        
+        # Show menu at button position
+        menu.exec(QCursor.pos())
+    
+    def export_clan_code(self):
+        """Export Telegram settings as encrypted clan code"""
+        from PySide6.QtWidgets import QInputDialog, QMessageBox, QDialog, QTextEdit
+        
+        # Get Telegram settings
+        bot_token = self.config.get("telegram_bot_token", "")
+        chat_id = self.config.get("telegram_chat_id", "")
+        
+        if not bot_token or not chat_id:
+            QMessageBox.warning(
+                self,
+                "Missing Settings",
+                "Please configure your Telegram bot token and chat ID in Settings first."
+            )
+            return
+        
+        # Ask for password with show password option
+        from PySide6.QtWidgets import QVBoxLayout, QCheckBox, QLineEdit
+        
+        password_dialog = QDialog(self)
+        password_dialog.setWindowTitle("Create Clan Code")
+        password_dialog.setMinimumWidth(400)
+        
+        pwd_layout = QVBoxLayout(password_dialog)
+        
+        pwd_label = QLabel("Enter a password for your clan code:\n(Share this password with your clan members)")
+        pwd_label.setStyleSheet("color: #d4d4d4; padding: 10px;")
+        pwd_layout.addWidget(pwd_label)
+        
+        pwd_input = QLineEdit()
+        pwd_input.setEchoMode(QLineEdit.Password)
+        pwd_input.setFont(QFont("Segoe UI", 11))
+        pwd_input.setMinimumHeight(32)
+        pwd_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                border: 1px solid #3e3e42;
+                border-radius: 4px;
+                padding: 6px;
+            }
+        """)
+        pwd_layout.addWidget(pwd_input)
+        
+        show_pwd_check = QCheckBox("Show Password")
+        show_pwd_check.setStyleSheet("color: #d4d4d4; padding: 5px;")
+        show_pwd_check.stateChanged.connect(
+            lambda state: pwd_input.setEchoMode(QLineEdit.Normal if state else QLineEdit.Password)
+        )
+        pwd_layout.addWidget(show_pwd_check)
+        
+        pwd_buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        pwd_buttons.accepted.connect(password_dialog.accept)
+        pwd_buttons.rejected.connect(password_dialog.reject)
+        pwd_layout.addWidget(pwd_buttons)
+        
+        if password_dialog.exec() != QDialog.Accepted:
+            return
+        
+        password = pwd_input.text()
+        if not password:
+            return
+        
+        # Create clan data
+        clan_data = {
+            "bot_token": bot_token,
+            "chat_id": chat_id,
+            "version": 1
+        }
+        
+        try:
+            # Encrypt the data
+            key = self.generate_clan_key(password)
+            fernet = Fernet(key)
+            encrypted = fernet.encrypt(json.dumps(clan_data).encode())
+            clan_code = encrypted.decode('utf-8')
+            
+            # Show dialog with clan code
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Clan Code Generated")
+            dialog.setMinimumWidth(600)
+            dialog.setMinimumHeight(300)
+            
+            layout = QVBoxLayout(dialog)
+            
+            label = QLabel("✅ Clan Code Created!\n\nShare this code and password with your clan members:")
+            label.setFont(QFont("Segoe UI", 11))
+            label.setStyleSheet("color: #28a745; padding: 10px;")
+            layout.addWidget(label)
+            
+            code_display = QTextEdit()
+            code_display.setPlainText(clan_code)
+            code_display.setReadOnly(True)
+            code_display.setFont(QFont("Consolas", 10))
+            code_display.setStyleSheet("""
+                QTextEdit {
+                    background-color: #111214;
+                    color: #00ff00;
+                    border: 2px solid #28a745;
+                    border-radius: 8px;
+                    padding: 12px;
+                }
+            """)
+            layout.addWidget(code_display)
+            
+            # Show password checkbox for generated code
+            from PySide6.QtWidgets import QCheckBox
+            show_code_check = QCheckBox(f"Show Password: {password}")
+            show_code_check.setStyleSheet("color: #d4d4d4; padding: 5px;")
+            show_code_check.stateChanged.connect(
+                lambda state: show_code_check.setText(f"Show Password: {password}" if state else "Show Password: " + "●" * len(password))
+            )
+            show_code_check.setText("Show Password: " + "●" * len(password))
+            layout.addWidget(show_code_check)
+            
+            hint = QLabel("⚠️ Keep your password secret! Anyone with the code + password can access your Telegram channel.")
+            hint.setWordWrap(True)
+            hint.setStyleSheet("color: #ffa500; padding: 10px;")
+            layout.addWidget(hint)
+            
+            button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+            button_box.accepted.connect(dialog.accept)
+            layout.addWidget(button_box)
+            
+            dialog.exec()
+            self.log("✓ Clan code exported successfully")
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Export Failed",
+                f"Failed to create clan code:\n{str(e)}"
+            )
+            self.log(f"✗ Clan code export failed: {str(e)}")
+    
+    def import_clan_code(self):
+        """Import Telegram settings from encrypted clan code"""
+        from PySide6.QtWidgets import QInputDialog, QMessageBox, QDialog, QTextEdit, QLabel
+        
+        # Create input dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Import Clan Code")
+        dialog.setMinimumWidth(600)
+        dialog.setMinimumHeight(350)
+        
+        layout = QVBoxLayout(dialog)
+        
+        label = QLabel("Paste your clan code below:")
+        label.setFont(QFont("Segoe UI", 11))
+        label.setStyleSheet("color: #d4d4d4; padding: 10px;")
+        layout.addWidget(label)
+        
+        code_input = QTextEdit()
+        code_input.setPlaceholderText("Paste clan code here...")
+        code_input.setFont(QFont("Consolas", 10))
+        code_input.setStyleSheet("""
+            QTextEdit {
+                background-color: #111214;
+                color: #d4d4d4;
+                border: 2px solid #17a2b8;
+                border-radius: 8px;
+                padding: 12px;
+            }
+        """)
+        layout.addWidget(code_input)
+        
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        if dialog.exec() != QDialog.Accepted:
+            return
+        
+        clan_code = code_input.toPlainText().strip()
+        if not clan_code:
+            return
+        
+        # Ask for password with show password option
+        from PySide6.QtWidgets import QCheckBox, QLineEdit
+        
+        password_dialog = QDialog(self)
+        password_dialog.setWindowTitle("Enter Password")
+        password_dialog.setMinimumWidth(400)
+        
+        pwd_layout = QVBoxLayout(password_dialog)
+        
+        pwd_label = QLabel("Enter the clan code password:\n(Ask your clan leader for the password)")
+        pwd_label.setStyleSheet("color: #d4d4d4; padding: 10px;")
+        pwd_layout.addWidget(pwd_label)
+        
+        pwd_input = QLineEdit()
+        pwd_input.setEchoMode(QLineEdit.Password)
+        pwd_input.setFont(QFont("Segoe UI", 11))
+        pwd_input.setMinimumHeight(32)
+        pwd_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                border: 1px solid #3e3e42;
+                border-radius: 4px;
+                padding: 6px;
+            }
+        """)
+        pwd_layout.addWidget(pwd_input)
+        
+        show_pwd_check = QCheckBox("Show Password")
+        show_pwd_check.setStyleSheet("color: #d4d4d4; padding: 5px;")
+        show_pwd_check.stateChanged.connect(
+            lambda state: pwd_input.setEchoMode(QLineEdit.Normal if state else QLineEdit.Password)
+        )
+        pwd_layout.addWidget(show_pwd_check)
+        
+        pwd_buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        pwd_buttons.accepted.connect(password_dialog.accept)
+        pwd_buttons.rejected.connect(password_dialog.reject)
+        pwd_layout.addWidget(pwd_buttons)
+        
+        if password_dialog.exec() != QDialog.Accepted:
+            return
+        
+        password = pwd_input.text()
+        if not password:
+            return
+        
+        try:
+            # Decrypt the clan code
+            key = self.generate_clan_key(password)
+            fernet = Fernet(key)
+            decrypted = fernet.decrypt(clan_code.encode())
+            clan_data = json.loads(decrypted.decode('utf-8'))
+            
+            # Validate data
+            if not isinstance(clan_data, dict):
+                raise ValueError("Invalid clan code format")
+            
+            bot_token = clan_data.get("bot_token")
+            chat_id = clan_data.get("chat_id")
+            
+            if not bot_token or not chat_id:
+                raise ValueError("Clan code is missing required settings")
+            
+            # Confirm import
+            result = QMessageBox.question(
+                self,
+                "Confirm Import",
+                f"This will update your Telegram settings to:\n\n"
+                f"Bot Token: {bot_token[:20]}...{bot_token[-10:]}\n"
+                f"Chat ID: {chat_id}\n\n"
+                f"Your current settings will be overwritten. Continue?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if result != QMessageBox.Yes:
+                return
+            
+            # Apply settings
+            self.config["telegram_bot_token"] = bot_token
+            self.config["telegram_chat_id"] = chat_id
+            self.save_config()
+            
+            # Restart Telegram service
+            self.telegram_service.stop()
+            QTimer.singleShot(500, self.telegram_service.start)
+            
+            QMessageBox.information(
+                self,
+                "Import Successful",
+                "✅ Clan code imported successfully!\n\nYour Telegram settings have been updated and the service has been restarted."
+            )
+            self.log("✓ Clan code imported and applied successfully")
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Import Failed",
+                f"Failed to import clan code:\n{str(e)}\n\nMake sure you entered the correct password."
+            )
+            self.log(f"✗ Clan code import failed: {str(e)}")
+    
     def on_plugin_enabled_changed(self, plugin, is_enabled: bool):
         """Handle plugin enable/disable checkbox change"""
         plugin_name = plugin.get_name()
@@ -976,8 +1312,16 @@ class MainWindow(QMainWindow):
     
     def closeEvent(self, event):
         """Handle application close"""
+        print("[App] Closing application...")
         self.telegram_service.stop()
+        
+        # Wait for thread to finish
+        if self.telegram_service.isRunning():
+            print("[App] Waiting for Telegram service to stop...")
+            self.telegram_service.wait(5000)
+        
         self.save_config()
+        print("[App] Application closed cleanly")
         event.accept()
 
 
