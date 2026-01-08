@@ -71,6 +71,22 @@
 <details open>
 <summary><b>Click to expand setup instructions</b></summary>
 
+### 🪟 Windows Users (Easiest Method)
+
+**Just double-click `run.bat`!**
+
+The script will automatically:
+- ✅ Check for Python (downloads portable version if needed)
+- ✅ Create virtual environment
+- ✅ Install all dependencies
+- ✅ Launch the application
+
+No manual setup required! 🎉
+
+---
+
+### 🐧 Manual Setup (All Platforms)
+
 ### 1️⃣ Clone the Repository
 ```bash
 git clone https://github.com/eman225511/RustPlusRaidAlarms.git
@@ -92,6 +108,13 @@ pip install -r requirements.txt
 - See **[📺 IFTTT + Rust+ Setup Guide](docs/IFTTT_RUST_SETUP.md)** for step-by-step instructions
 
 ### 5️⃣ Run the App
+
+**Windows:**
+```bash
+run.bat
+```
+
+**macOS/Linux:**
 ```bash
 python main.py
 ```
