@@ -6,7 +6,7 @@ setlocal enabledelayedexpansion
 
 echo.
 echo ========================================
-echo  RustPlus Raid Alarms - Auto Setup
+echo  RustPlus Raid Alarms - Auto Setup/Run
 echo ========================================
 echo.
 
