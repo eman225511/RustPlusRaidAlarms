@@ -2,11 +2,20 @@
 
 This guide walks you through creating a Telegram bot and obtaining your chat ID for use with RustPlus Raid Alarms.
 
+## 📺 Video Tutorials
+
+**Prefer video guides?** Watch these step-by-step tutorials:
+- **[Making a Telegram Bot](https://youtu.be/_w4VcagV8EA?si=f3G6vHn-Wmlz5Elu)** - Create your bot with @BotFather
+- **[Add IFTTT to Telegram](https://youtu.be/4NVHvA1kXG0?si=S8XAn8CaeG9b0atQ)** - Add IFTTT bot for Rust+ integration
+- **[Add IFTTT Bot to Channel](https://youtu.be/Wex5833rA3k?si=c-wSmEe3KMh-tOGg)** - Make IFTTT post to your channel
+
 ## Prerequisites
 - Telegram account (mobile or desktop app)
 - A Telegram channel or group where raid alarms will be sent
 
 ## Step 1: Create a Telegram Bot
+
+**📺 [Video Guide: Making a Bot](https://youtu.be/_w4VcagV8EA?si=f3G6vHn-Wmlz5Elu)**
 
 1. Open Telegram and start a chat with [@BotFather](https://t.me/BotFather)
 2. Send the command `/newbot`
@@ -19,13 +28,23 @@ This guide walks you through creating a Telegram bot and obtaining your chat ID 
    ```
    **⚠️ Keep this token secure!** Anyone with the token can control your bot.
 
-## Step 2: Add Bot to Your Channel/Group
+## Step 2: Add Bots to Your Channel/Group
 
+**📺 [Video Guide: Add IFTTT to Channel](https://youtu.be/Wex5833rA3k?si=c-wSmEe3KMh-tOGg)**
+
+### Add Your Bot
 1. Open your target channel or group
 2. Go to **Settings** → **Administrators** → **Add Admin**
 3. Search for your bot by username
 4. Grant the bot permission to **Post Messages** (minimum required)
-5. If using IFTTT, also add the IFTTT bot as an admin
+
+### Add IFTTT Bot (for Rust+ integration)
+**📺 [Video Guide: Add IFTTT Bot](https://youtu.be/4NVHvA1kXG0?si=S8XAn8CaeG9b0atQ)**
+
+1. Add [@IFTTT](https://t.me/ifttt) bot to Telegram
+2. Connect your Telegram account to IFTTT
+3. Add IFTTT bot as admin to your channel (same as above)
+4. Now IFTTT can post Rust+ raid alerts to your channel!
 
 ## Step 3: Get Your Chat ID
 

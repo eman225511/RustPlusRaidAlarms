@@ -1,8 +1,10 @@
-# RustPlus Raid Alarms
+# 🚨 RustPlus Raid Alarms
 
-Sleek, plugin-based desktop app that listens to Telegram for raid alarms and triggers customizable actions (e.g., LEDs). Drop in plugins—no code changes to the core.
+**Never miss a raid again!** Get instant notifications on your phone, auto-launch Rust, flash your lights, and more when your base is under attack.
 
-## Features
+This sleek desktop app monitors your Telegram for raid alerts from Rust+ (via IFTTT) and triggers customizable plugins—no coding required. Just enable the plugins you want and you're set!
+
+## ✨ Features
 - **Telegram Integration** 
   - Real-time message polling with configurable rate (default: 2 seconds)
   - Optional keyword filtering for selective alerts
@@ -58,7 +60,7 @@ Sleek, plugin-based desktop app that listens to Telegram for raid alarms and tri
 
 3. **Set up Telegram**
    - Create a bot with [@BotFather](https://t.me/BotFather) → get your token
-   - Get your chat ID (see [Telegram Setup Guide](docs/TELEGRAM_SETUP.md))
+   - Get your chat ID (see [Telegram Setup Guide](docs/TELEGRAM_SETUP.md) with video tutorials!)
    - Enter credentials via the in-app **Settings** dialog (or edit `config.json`)
 
 4. **Connect IFTTT + Rust+ (optional)**
@@ -70,18 +72,23 @@ Sleek, plugin-based desktop app that listens to Telegram for raid alarms and tri
    python main.py
    ```
 
-6. **Customize LED actions** (optional)
-   - Navigate to the LED plugin tab
-   - Configure your WLED/Govee/Hue device and trigger actions (Govee has a Scan Devices button)
-   - See [LED Plugin Guide](docs/LED_PLUGIN.md) for details
+6. **Customize plugins** (optional)
+   - Navigate to plugin tabs in the left sidebar
+   - Configure LED devices, phone numbers, audio files, Discord webhooks, etc.
+   - Use the ❓ help buttons for setup guides
+   - Click test buttons to verify everything works
+   - Enable the plugins you want with the checkboxes!
 
 ## Plugins
 Plugins are automatically loaded from the `plugins/` directory and appear in the left sidebar. No core code changes needed—just drop in your plugin and it's ready.
 
 ### Built-in Plugins
-- **LED Controller** — Control WLED, Govee, or Philips Hue devices with customizable actions
-- **Example Plugin** — Development template (package format) showing UI, config persistence, and Telegram hooks
-- **Simple Example** — Minimal single-file plugin demonstrating basic functionality
+- **💡 LED Controller** — Flash WLED, Govee, or Philips Hue lights when raided ([Guide](docs/plugins/LED_CONTROLLER.md))
+- **🎮 Rust Auto-Connect** — Automatically launch Rust and join your server ([Guide](docs/plugins/RUST_CONNECT.md))
+- **📞 Twilio Caller** — Call multiple phone numbers to wake you up ([Guide](docs/plugins/TWILIO_CALLER.md))
+- **🔊 Audio Alert** — Play custom sounds on multiple audio devices ([Guide](docs/plugins/AUDIO_ALERT.md))
+- **💬 Discord Webhook** — Post raid alerts to Discord with @mentions ([Guide](docs/plugins/DISCORD_WEBHOOK.md))
+- **Example Plugins** — Templates for developers (hidden by default)
 
 ### Plugin Types
 - **Single-file**: `plugins/my_plugin.py` (simple plugins)
@@ -100,16 +107,26 @@ See the [Plugin Development Guide](docs/PLUGIN_DEVELOPMENT.md) for:
 - `plugins/example_plugin/` — Package-based plugin with advanced features (hero cards, settings, status labels)
 - `plugins/simple_example.py` — Single-file plugin showing minimal implementation (counter, name input, buttons)
 
-## Documentation
-- **[Telegram Setup](docs/TELEGRAM_SETUP.md)** — Creating your bot, getting chat IDs, troubleshooting
-- **[IFTTT + Rust+ Setup](docs/IFTTT_RUST_SETUP.md)** — Connect your Rust server to send automatic raid alarms to Telegram
-- **[LED Plugin Guide](docs/LED_PLUGIN.md)** — Configuring WLED/Govee/Hue devices and actions
-- **[Plugin Development](docs/PLUGIN_DEVELOPMENT.md)** — Creating custom plugins with the plugin API
-- **[Configuration](docs/CONFIGURATION.md)** — Understanding and editing `config.json`
+## 📚 Documentation
+
+### Getting Started
+- **[Telegram Setup](docs/TELEGRAM_SETUP.md)** — Creating your bot and getting chat IDs (with video guides!)
+- **[IFTTT + Rust+ Setup](docs/IFTTT_RUST_SETUP.md)** — Connect Rust server to send raid alarms to Telegram
+
+### Plugin Guides
+- **[LED Controller](docs/plugins/LED_CONTROLLER.md)** — WLED, Govee, and Philips Hue setup
+- **[Rust Auto-Connect](docs/plugins/RUST_CONNECT.md)** — Auto-launch Rust when raided
+- **[Twilio Caller](docs/plugins/TWILIO_CALLER.md)** — Phone call notifications
+- **[Audio Alert](docs/plugins/AUDIO_ALERT.md)** — Custom sound alerts
+- **[Discord Webhook](docs/plugins/DISCORD_WEBHOOK.md)** — Discord server notifications
+
+### Advanced
+- **[Plugin Development](docs/PLUGIN_DEVELOPMENT.md)** — Create your own plugins
+- **[Configuration](docs/CONFIGURATION.md)** — Understanding `config.json`
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** — Common issues and solutions
 
 ## LED Controller Plugin
-Control smart LED devices directly from the app with trigger-on-message support.
+Control smart LED devices directly from the app with trigger-on-message support. **[Full Guide →](docs/plugins/LED_CONTROLLER.md)**
 
 ### Supported Devices
 - **WLED** — WiFi-enabled LED controllers
@@ -130,7 +147,7 @@ Each device type requires specific credentials:
 - **Govee**: API key, device ID, device model
 - **Philips Hue**: Bridge IP, bridge username
 
-See the [LED Plugin Guide](docs/LED_PLUGIN.md) for detailed setup instructions and troubleshooting.
+See the [LED Plugin Guide](docs/plugins/LED_CONTROLLER.md) for detailed setup instructions and troubleshooting.
 
 ## Configuration
 All settings are stored in `config.json` (auto-created on first launch).
@@ -160,30 +177,34 @@ See the [Configuration Guide](docs/CONFIGURATION.md) for the complete `config.js
 ## Project Structure
 ```
 RustPlusRaidAlarms/
-├── main.py                    # App shell, plugin loader, dark theme, Telegram wiring
-├── telegram_service.py        # Telegram polling thread with keyword filter
-├── plugin_base.py             # Abstract plugin base class (contract)
-├── config.json                # Auto-generated config (Telegram, LED, plugins) [gitignored]
+├── main.py                    # App shell, plugin loader, dark theme
+├── telegram_service.py        # Telegram polling with auto-retry
+├── plugin_base.py             # Abstract plugin base class
+├── config.json                # Auto-generated config [gitignored]
 ├── config.example.json        # Template config file
 ├── requirements.txt           # Python dependencies
 │
 ├── plugins/
-│   ├── led_plugin/            # Built-in LED controller
-│   │   ├── __init__.py        # Plugin UI and logic
-│   │   └── led_controller.py  # WLED/Govee/Hue API clients
-│   │
-│   ├── example_plugin/        # Package-based development template
-│   │   └── __init__.py        # Advanced example with hero cards, settings
-│   │
-│   └── simple_example.py      # Single-file plugin template (minimal)
+│   ├── led_plugin/            # 💡 LED controller (WLED/Govee/Hue)
+│   ├── rust_connect.py        # 🎮 Rust auto-connect
+│   ├── twilio_plugin/         # 📞 Twilio phone calls
+│   ├── audio_alert.py         # 🔊 Custom sound alerts
+│   ├── discord_webhook.py     # 💬 Discord notifications
+│   ├── example_plugin/        # Development template (package)
+│   └── simple_example.py      # Development template (single-file)
 │
 └── docs/
-    ├── TELEGRAM_SETUP.md      # Bot creation and chat ID setup
-    ├── IFTTT_RUST_SETUP.md    # IFTTT + Rust+ integration guide
-    ├── LED_PLUGIN.md          # LED device configuration
+    ├── TELEGRAM_SETUP.md      # Bot creation with video guides
+    ├── IFTTT_RUST_SETUP.md    # IFTTT + Rust+ integration
     ├── PLUGIN_DEVELOPMENT.md  # Plugin API and creation guide
-    ├── CONFIGURATION.md       # config.json schema and fields
-    └── TROUBLESHOOTING.md     # Common issues and solutions
+    ├── CONFIGURATION.md       # config.json schema
+    ├── TROUBLESHOOTING.md     # Common issues
+    └── plugins/               # Individual plugin guides
+        ├── LED_CONTROLLER.md
+        ├── RUST_CONNECT.md
+        ├── TWILIO_CALLER.md
+        ├── AUDIO_ALERT.md
+        └── DISCORD_WEBHOOK.md
 ```
 
 ## Contributing
