@@ -20,6 +20,7 @@ from PySide6.QtCore import Qt, Signal, QTimer, QPoint, QMimeData, QSize
 from PySide6.QtGui import QFont, QColor, QPalette, QDrag, QCursor
 
 from telegram_service import TelegramService
+from relay_server import RelayServer, RelayClient
 from plugin_base import PluginBase
 
 CONFIG_FILE = "config.json"
@@ -97,6 +98,12 @@ class MainWindow(QMainWindow):
         self.telegram_service.message_received.connect(self.on_telegram_message)
         self.telegram_service.status_changed.connect(self.on_telegram_status)
         
+        # Relay server/client
+        self.relay_server = RelayServer(port=5555)
+        self.relay_server.status_changed.connect(self.on_relay_server_status)
+        self.relay_server.tunnel_url_ready.connect(self.on_tunnel_url_ready)
+        self.relay_client = None  # Created when connecting to a server
+        
         # Plugin system
         self.plugins = []
         self.plugin_widgets = {}
@@ -118,8 +125,15 @@ class MainWindow(QMainWindow):
         self.plugin_watch_timer.timeout.connect(self.load_plugins)
         self.plugin_watch_timer.start()
         
-        # Auto-start Telegram listener
-        QTimer.singleShot(500, self.telegram_service.start)
+        # Check if in relay mode and restore connection
+        if self.config.get("relay_mode", False) and self.config.get("relay_client_server"):
+            QTimer.singleShot(1000, self.restore_relay_connection)
+        else:
+            # Auto-start Telegram listener if not in relay mode
+            QTimer.singleShot(500, self.telegram_service.start)
+        
+        # Update connection mode UI after tabs are created
+        QTimer.singleShot(1500, self.update_connection_mode_status)
     
     def load_config(self):
         """Load configuration from JSON file"""
@@ -197,6 +211,14 @@ class MainWindow(QMainWindow):
         telegram_tab = self.create_telegram_tab()
         self.content_stack.addTab(telegram_tab, "")
         
+        # Logs Tab (always second)
+        logs_tab = self.create_logs_tab()
+        self.content_stack.addTab(logs_tab, "")
+        
+        # Clan Tab (always third)
+        clan_tab = self.create_clan_tab()
+        self.content_stack.addTab(clan_tab, "")
+        
         # Vertical tab bar (right side)
         self.tab_bar = self.create_vertical_tab_bar()
         
@@ -210,6 +232,33 @@ class MainWindow(QMainWindow):
     
     def create_telegram_tab(self):
         """Create the Telegram core tab with a cleaner layout"""
+        # Create scroll area
+        from PySide6.QtWidgets import QScrollArea
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background-color: #1e1e1e;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #3e3e42;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #505053;
+            }
+        """)
+        
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -244,15 +293,6 @@ class MainWindow(QMainWindow):
         pill_row.addWidget(self.pill_poll)
 
         pill_row.addStretch()
-
-        # Clan Codes menu button (small, top-right)
-        clan_menu_btn = QPushButton("👥 Clan Codes")
-        clan_menu_btn.setFont(QFont("Segoe UI", 9))
-        clan_menu_btn.setMinimumHeight(28)
-        clan_menu_btn.setMaximumWidth(120)
-        clan_menu_btn.setStyleSheet(self.get_button_style("#6c42f5"))
-        clan_menu_btn.clicked.connect(self.show_clan_menu)
-        pill_row.addWidget(clan_menu_btn)
 
         hero_layout.addLayout(pill_row)
 
@@ -360,28 +400,56 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(filter_frame)
 
+        layout.addStretch()
+        
+        scroll.setWidget(widget)
+        return scroll
+    
+    def create_logs_tab(self):
+        """Create logs tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+
+        # Header
+        header = QFrame()
+        header.setObjectName("heroCard")
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(16, 16, 16, 16)
+
+        title_row = QHBoxLayout()
+        
+        title = QLabel("📋 Activity Logs")
+        title.setFont(QFont("Segoe UI", 22, QFont.Bold))
+        title.setStyleSheet("color: #ffffff;")
+        title_row.addWidget(title)
+        
+        title_row.addStretch()
+        
+        # Clear log button
+        clear_log_btn = QPushButton("🧹 Clear Log")
+        clear_log_btn.setFont(QFont("Segoe UI", 11))
+        clear_log_btn.setMinimumHeight(36)
+        clear_log_btn.setStyleSheet(self.get_button_style("#6c757d"))
+        clear_log_btn.clicked.connect(self.clear_log)
+        title_row.addWidget(clear_log_btn)
+        
+        header_layout.addLayout(title_row)
+
+        subtitle = QLabel("Real-time activity and event monitoring")
+        subtitle.setFont(QFont("Segoe UI", 11))
+        subtitle.setStyleSheet("color: #b8b8b8;")
+        header_layout.addWidget(subtitle)
+
+        layout.addWidget(header)
+
         # Activity log card
         log_frame = QFrame()
         log_frame.setObjectName("card")
         log_layout = QVBoxLayout(log_frame)
         log_layout.setContentsMargins(16, 16, 16, 16)
         log_layout.setSpacing(10)
-
-        log_header = QHBoxLayout()
-        log_label = QLabel("Activity Log")
-        log_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        log_label.setStyleSheet("color: #e6e6e6;")
-        log_header.addWidget(log_label)
-        log_header.addStretch()
-        log_layout.addLayout(log_header)
-
-        # Clear log button
-        clear_log_btn = QPushButton("🧹 Clear Log")
-        clear_log_btn.setFont(QFont("Segoe UI", 10))
-        clear_log_btn.setMinimumHeight(32)
-        clear_log_btn.setStyleSheet(self.get_button_style("#6c757d"))
-        clear_log_btn.clicked.connect(self.clear_log)
-        log_header.addWidget(clear_log_btn)
 
         self.log_display = QTextEdit()
         self.log_display.setReadOnly(True)
@@ -399,9 +467,270 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(log_frame, 1)
 
-        layout.addStretch()
-
         return widget
+    
+    def create_clan_tab(self):
+        """Create clan tab for sharing and collaboration features"""
+        # Create scroll area
+        from PySide6.QtWidgets import QScrollArea
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background-color: #1e1e1e;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #3e3e42;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #505053;
+            }
+        """)
+        
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+
+        # Header
+        header = QFrame()
+        header.setObjectName("heroCard")
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(16, 16, 16, 16)
+
+        title = QLabel("👥 Clan Sharing")
+        title.setFont(QFont("Segoe UI", 22, QFont.Bold))
+        title.setStyleSheet("color: #ffffff;")
+        header_layout.addWidget(title)
+
+        subtitle = QLabel("Share alerts with your team using encrypted codes or relay server")
+        subtitle.setFont(QFont("Segoe UI", 11))
+        subtitle.setStyleSheet("color: #b8b8b8;")
+        header_layout.addWidget(subtitle)
+
+        layout.addWidget(header)
+
+        # Telegram Clan Codes Section
+        telegram_frame = QFrame()
+        telegram_frame.setObjectName("card")
+        telegram_layout = QVBoxLayout(telegram_frame)
+        telegram_layout.setContentsMargins(16, 16, 16, 16)
+        telegram_layout.setSpacing(12)
+
+        telegram_header = QLabel("📱 Telegram Clan Codes")
+        telegram_header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        telegram_header.setStyleSheet("color: #e6e6e6;")
+        telegram_layout.addWidget(telegram_header)
+
+        telegram_desc = QLabel("Share encrypted Telegram bot credentials with your clan. Everyone gets the same bot setup.")
+        telegram_desc.setStyleSheet("color: #9aa0a6;")
+        telegram_desc.setWordWrap(True)
+        telegram_layout.addWidget(telegram_desc)
+
+        telegram_buttons = QHBoxLayout()
+        
+        export_telegram_btn = QPushButton("📤 Export Clan Code")
+        export_telegram_btn.setFont(QFont("Segoe UI", 11))
+        export_telegram_btn.setMinimumHeight(42)
+        export_telegram_btn.setStyleSheet(self.get_button_style("#28a745"))
+        export_telegram_btn.clicked.connect(self.export_clan_code)
+        telegram_buttons.addWidget(export_telegram_btn)
+        
+        import_telegram_btn = QPushButton("📥 Import Clan Code")
+        import_telegram_btn.setFont(QFont("Segoe UI", 11))
+        import_telegram_btn.setMinimumHeight(42)
+        import_telegram_btn.setStyleSheet(self.get_button_style("#17a2b8"))
+        import_telegram_btn.clicked.connect(self.import_clan_code)
+        telegram_buttons.addWidget(import_telegram_btn)
+        
+        telegram_layout.addLayout(telegram_buttons)
+
+        telegram_warning = QLabel("⚠️ Note: Multiple people using the same bot may experience polling conflicts. Use Relay Server for better experience.")
+        telegram_warning.setStyleSheet("color: #ffa500; font-size: 9pt;")
+        telegram_warning.setWordWrap(True)
+        telegram_layout.addWidget(telegram_warning)
+
+        layout.addWidget(telegram_frame)
+
+        # Relay Server Section
+        relay_frame = QFrame()
+        relay_frame.setObjectName("card")
+        relay_layout = QVBoxLayout(relay_frame)
+        relay_layout.setContentsMargins(16, 16, 16, 16)
+        relay_layout.setSpacing(12)
+
+        relay_header = QLabel("🌐 Relay Server (Recommended)")
+        relay_header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        relay_header.setStyleSheet("color: #e6e6e6;")
+        relay_layout.addWidget(relay_header)
+
+        relay_desc = QLabel("Host a relay server so your clan can connect to YOU. Only one person needs Telegram setup, auto-tunnels with ngrok (no port forwarding).")
+        relay_desc.setStyleSheet("color: #9aa0a6;")
+        relay_desc.setWordWrap(True)
+        relay_layout.addWidget(relay_desc)
+
+        # Server Mode Toggle
+        self.clan_server_checkbox = QCheckBox("Enable Relay Server Mode")
+        self.clan_server_checkbox.setChecked(bool(self.config.get("server_mode_enabled", False)))
+        self.clan_server_checkbox.stateChanged.connect(self.on_server_mode_toggle)
+        self.clan_server_checkbox.setStyleSheet("font-size: 11pt; padding: 8px;")
+        relay_layout.addWidget(self.clan_server_checkbox)
+
+        self.clan_server_status_label = QLabel("Server offline")
+        self.clan_server_status_label.setStyleSheet("color: #888888; padding: 6px; background-color: #1a1a1a; border-radius: 6px;")
+        self.clan_server_status_label.setWordWrap(True)
+        relay_layout.addWidget(self.clan_server_status_label)
+
+        relay_buttons = QHBoxLayout()
+        
+        export_server_btn = QPushButton("🌐 Export Server Code")
+        export_server_btn.setFont(QFont("Segoe UI", 11))
+        export_server_btn.setMinimumHeight(42)
+        export_server_btn.setStyleSheet(self.get_button_style("#6c42f5"))
+        export_server_btn.clicked.connect(self.export_server_code)
+        relay_buttons.addWidget(export_server_btn)
+        
+        import_server_btn = QPushButton("🌐 Import Server Code")
+        import_server_btn.setFont(QFont("Segue UI", 11))
+        import_server_btn.setMinimumHeight(42)
+        import_server_btn.setStyleSheet(self.get_button_style("#17a2b8"))
+        import_server_btn.clicked.connect(self.import_server_code)
+        relay_buttons.addWidget(import_server_btn)
+        
+        relay_layout.addLayout(relay_buttons)
+
+        # Ngrok Setup Section
+        ngrok_setup_frame = QFrame()
+        ngrok_setup_frame.setObjectName("card")
+        ngrok_setup_frame.setStyleSheet("QFrame#card { background-color: #1a1a1a; }")
+        ngrok_setup_layout = QVBoxLayout(ngrok_setup_frame)
+        ngrok_setup_layout.setContentsMargins(12, 12, 12, 12)
+        ngrok_setup_layout.setSpacing(8)
+
+        ngrok_title = QLabel("🔧 Ngrok Authentication (Optional)")
+        ngrok_title.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        ngrok_title.setStyleSheet("color: #e6e6e6;")
+        ngrok_setup_layout.addWidget(ngrok_title)
+
+        ngrok_info = QLabel("For internet access (not just local WiFi), set up your ngrok authtoken:")
+        ngrok_info.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        ngrok_info.setWordWrap(True)
+        ngrok_setup_layout.addWidget(ngrok_info)
+
+        authtoken_layout = QHBoxLayout()
+        
+        self.ngrok_authtoken_input = QLineEdit()
+        self.ngrok_authtoken_input.setPlaceholderText("Paste your ngrok authtoken here...")
+        self.ngrok_authtoken_input.setEchoMode(QLineEdit.Password)
+        self.ngrok_authtoken_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #2d2d30;
+                color: #d4d4d4;
+                border: 1px solid #3e3e42;
+                padding: 8px;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+        """)
+        authtoken_layout.addWidget(self.ngrok_authtoken_input, 1)
+
+        save_authtoken_btn = QPushButton("💾 Save")
+        save_authtoken_btn.setMinimumHeight(36)
+        save_authtoken_btn.setStyleSheet(self.get_button_style("#28a745"))
+        save_authtoken_btn.clicked.connect(self.save_ngrok_authtoken)
+        authtoken_layout.addWidget(save_authtoken_btn)
+
+        ngrok_setup_layout.addLayout(authtoken_layout)
+
+        ngrok_hint = QLabel("💡 Get your authtoken: <a href='https://dashboard.ngrok.com/get-started/your-authtoken' style='color: #17a2b8;'>dashboard.ngrok.com/get-started/your-authtoken</a>")
+        ngrok_hint.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        ngrok_hint.setOpenExternalLinks(True)
+        ngrok_hint.setWordWrap(True)
+        ngrok_setup_layout.addWidget(ngrok_hint)
+
+        relay_layout.addWidget(ngrok_setup_frame)
+
+        layout.addWidget(relay_frame)
+
+        # Connection Mode Status
+        mode_frame = QFrame()
+        mode_frame.setObjectName("card")
+        mode_layout = QVBoxLayout(mode_frame)
+        mode_layout.setContentsMargins(16, 16, 16, 16)
+        mode_layout.setSpacing(10)
+
+        mode_header = QLabel("📡 Current Connection Mode")
+        mode_header.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        mode_header.setStyleSheet("color: #e6e6e6;")
+        mode_layout.addWidget(mode_header)
+
+        self.clan_mode_status = QLabel("🔹 Direct Telegram Mode")
+        self.clan_mode_status.setStyleSheet("color: #17a2b8; padding: 8px; background-color: #1a1a1a; border-radius: 6px; font-size: 11pt;")
+        self.clan_mode_status.setWordWrap(True)
+        mode_layout.addWidget(self.clan_mode_status)
+
+        # Disconnect button (hidden by default)
+        self.disconnect_relay_btn = QPushButton("🔌 Disconnect from Relay & Use Direct Telegram")
+        self.disconnect_relay_btn.setMinimumHeight(40)
+        self.disconnect_relay_btn.setStyleSheet(self.get_button_style("#dc3545"))
+        self.disconnect_relay_btn.clicked.connect(self.disconnect_from_relay)
+        self.disconnect_relay_btn.hide()
+        mode_layout.addWidget(self.disconnect_relay_btn)
+
+        mode_hint = QLabel("💡 You can only use one mode at a time. Connect to a relay server to switch from direct Telegram, or disconnect to go back.")
+        mode_hint.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        mode_hint.setWordWrap(True)
+        mode_layout.addWidget(mode_hint)
+
+        layout.addWidget(mode_frame)
+
+        # Info Section
+        info_frame = QFrame()
+        info_frame.setObjectName("card")
+        info_layout = QVBoxLayout(info_frame)
+        info_layout.setContentsMargins(16, 16, 16, 16)
+        info_layout.setSpacing(8)
+
+        info_header = QLabel("💡 How It Works")
+        info_header.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        info_header.setStyleSheet("color: #e6e6e6;")
+        info_layout.addWidget(info_header)
+
+        info_text = QLabel(
+            "<b>Telegram Clan Codes:</b><br>"
+            "• One person sets up Telegram bot<br>"
+            "• Export encrypted code with password<br>"
+            "• Clan members import code to get same bot<br>"
+            "• ⚠️ May conflict if multiple people online<br><br>"
+            
+            "<b>Relay Server (Better!):</b><br>"
+            "• Host enables Server Mode (gets Telegram messages)<br>"
+            "• Export server code (includes public ngrok URL)<br>"
+            "• Clan members import server code and connect<br>"
+            "• ✅ No conflicts, no Telegram setup needed for members<br>"
+            "• 🔒 Optional password protection"
+        )
+        info_text.setStyleSheet("color: #d4d4d4; line-height: 1.4;")
+        info_text.setWordWrap(True)
+        info_layout.addWidget(info_text)
+
+        layout.addWidget(info_frame)
+
+        layout.addStretch()
+        
+        scroll.setWidget(widget)
+        return scroll
     
     def create_vertical_tab_bar(self):
         """Create vertical tab bar on the right"""
@@ -434,8 +763,26 @@ class MainWindow(QMainWindow):
         core_btn.clicked.connect(lambda: self.switch_tab(0))
         tab_layout.addWidget(core_btn)
         
+        # Logs button
+        logs_btn = DraggableButton("📋 Logs")
+        logs_btn.is_core_tab = True  # Logs tab shouldn't be draggable
+        logs_btn.setFont(QFont("Segoe UI", 10))
+        logs_btn.setMinimumHeight(38)
+        logs_btn.setStyleSheet(self.get_tab_button_style(False))
+        logs_btn.clicked.connect(lambda: self.switch_tab(1))
+        tab_layout.addWidget(logs_btn)
+        
+        # Clan button
+        clan_btn = DraggableButton("👥 Clan")
+        clan_btn.is_core_tab = True  # Clan tab shouldn't be draggable
+        clan_btn.setFont(QFont("Segoe UI", 10))
+        clan_btn.setMinimumHeight(38)
+        clan_btn.setStyleSheet(self.get_tab_button_style(False))
+        clan_btn.clicked.connect(lambda: self.switch_tab(2))
+        tab_layout.addWidget(clan_btn)
+        
         # Store tab buttons
-        self.tab_buttons = [core_btn]
+        self.tab_buttons = [core_btn, logs_btn, clan_btn]
         
         # Separator
         separator = QFrame()
@@ -484,6 +831,10 @@ class MainWindow(QMainWindow):
         for i, btn in enumerate(self.tab_buttons):
             if i == 0:
                 tab_idx = 0  # core tab
+            elif i == 1:
+                tab_idx = 1  # logs tab
+            elif i == 2:
+                tab_idx = 2  # clan tab
             else:
                 mapping = self.tab_button_map.get(str(id(btn)), {})
                 tab_idx = mapping.get('tab_index', i)
@@ -507,8 +858,8 @@ class MainWindow(QMainWindow):
         if source_idx is None or target_idx is None:
             return
 
-        # Don't allow reordering with Core tab (index 0)
-        if source_idx == 0 or target_idx == 0:
+        # Don't allow reordering with fixed tabs (Core=0, Logs=1, Clan=2)
+        if source_idx <= 2 or target_idx <= 2:
             return
 
         source_btn = self.tab_buttons[source_idx]
@@ -545,7 +896,7 @@ class MainWindow(QMainWindow):
 
         # Rebuild tab_button_map in new order (preserve tab_index and flags)
         new_map = {}
-        for btn in self.tab_buttons[1:]:  # skip core
+        for btn in self.tab_buttons[3:]:  # skip core, logs, and clan
             old = self.tab_button_map.get(str(id(btn)), {})
             new_map[str(id(btn))] = old
         self.tab_button_map.update(new_map)
@@ -562,6 +913,10 @@ class MainWindow(QMainWindow):
             # Determine the correct content_stack index for this button
             if i == 0:
                 tab_idx = 0  # Core tab always 0
+            elif i == 1:
+                tab_idx = 1  # Logs tab always 1
+            elif i == 2:
+                tab_idx = 2  # Clan tab always 2
             else:
                 mapping = self.tab_button_map.get(str(id(btn)), {})
                 tab_idx = mapping.get('tab_index', i)
@@ -789,6 +1144,10 @@ class MainWindow(QMainWindow):
         """Handle incoming Telegram messages"""
         self.log(f"📨 Telegram message received: {message[:50]}...")
         
+        # Broadcast to relay server if enabled
+        if self.config.get("server_mode_enabled", False):
+            self.relay_server.broadcast_message(message)
+        
         # Notify all enabled plugins
         for plugin in self.plugins:
             try:
@@ -829,6 +1188,259 @@ class MainWindow(QMainWindow):
         self.config["filter_keyword"] = self.filter_input.text().strip()
         self.save_config()
     
+    def on_server_mode_toggle(self, state):
+        """Enable/disable relay server mode"""
+        enabled = bool(state)
+        
+        if enabled:
+            # Ask for password (optional)
+            from PySide6.QtWidgets import QMessageBox
+            
+            result = QMessageBox.question(
+                self,
+                "Server Password",
+                "Set a password for your relay server?\n\n"
+                "✅ Recommended - only clan members with password can connect\n"
+                "⚠️ Skip - anyone with server code can connect",
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+            )
+            
+            if result == QMessageBox.Cancel:
+                self.clan_server_checkbox.setChecked(False)
+                return
+            
+            password = None
+            if result == QMessageBox.Yes:
+                password = self.show_password_dialog(
+                    "Set Server Password",
+                    "Enter password for relay server:\n(Share this with your clan)"
+                )
+                
+                if password is None:  # User cancelled
+                    self.clan_server_checkbox.setChecked(False)
+                    return
+                
+                if password:
+                    self.config["server_password"] = password
+                    self.relay_server.set_password(password)
+                    self.log("🔒 Server password protection enabled")
+            
+            self.config["server_mode_enabled"] = enabled
+            self.save_config()
+            self.relay_server.start()
+            self.log("🌐 Relay server mode enabled - broadcasting to clients")
+        else:
+            self.config["server_mode_enabled"] = enabled
+            self.save_config()
+            self.relay_server.stop()
+            self.log("🌐 Relay server mode disabled")
+    
+    def show_password_dialog(self, title, message):
+        """Show a custom password dialog with show/hide toggle"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QCheckBox, QPushButton, QHBoxLayout
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setMinimumWidth(400)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e1e;
+            }
+            QLabel {
+                color: #d4d4d4;
+                font-size: 11pt;
+            }
+            QLineEdit {
+                background-color: #2d2d30;
+                color: #d4d4d4;
+                border: 1px solid #3e3e42;
+                padding: 8px;
+                border-radius: 4px;
+                font-size: 11pt;
+            }
+            QCheckBox {
+                color: #d4d4d4;
+                font-size: 10pt;
+            }
+            QPushButton {
+                background-color: #0e639c;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 10pt;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background-color: #1177bb;
+            }
+            QPushButton#cancelButton {
+                background-color: #3e3e42;
+            }
+            QPushButton#cancelButton:hover {
+                background-color: #505053;
+            }
+        """)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Message label
+        msg_label = QLabel(message)
+        msg_label.setWordWrap(True)
+        layout.addWidget(msg_label)
+        
+        # Password input
+        password_input = QLineEdit()
+        password_input.setEchoMode(QLineEdit.Password)
+        password_input.setPlaceholderText("Enter password...")
+        layout.addWidget(password_input)
+        
+        # Show password checkbox
+        show_password_checkbox = QCheckBox("Show password")
+        show_password_checkbox.stateChanged.connect(
+            lambda state: password_input.setEchoMode(
+                QLineEdit.Normal if state else QLineEdit.Password
+            )
+        )
+        layout.addWidget(show_password_checkbox)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("cancelButton")
+        cancel_btn.clicked.connect(dialog.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        ok_btn = QPushButton("OK")
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(ok_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # Show dialog and return result
+        if dialog.exec() == QDialog.Accepted:
+            return password_input.text()
+        return None
+    
+    def save_ngrok_authtoken(self):
+        """Save ngrok authtoken configuration"""
+        from PySide6.QtWidgets import QMessageBox
+        import subprocess
+        
+        authtoken = self.ngrok_authtoken_input.text().strip()
+        
+        if not authtoken:
+            QMessageBox.warning(
+                self,
+                "No Token",
+                "Please paste your ngrok authtoken in the input box.\n\n"
+                "Get it from: https://dashboard.ngrok.com/get-started/your-authtoken"
+            )
+            return
+        
+        try:
+            # Run ngrok config command
+            result = subprocess.run(
+                ['ngrok', 'config', 'add-authtoken', authtoken],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode == 0:
+                QMessageBox.information(
+                    self,
+                    "✅ Success",
+                    "Ngrok authtoken saved successfully!\n\n"
+                    "You can now enable Relay Server Mode for internet access.\n"
+                    "If server is already running, disable and re-enable it to apply changes."
+                )
+                self.log("✓ Ngrok authtoken configured successfully")
+                self.ngrok_authtoken_input.clear()
+            else:
+                error_msg = result.stderr or result.stdout or "Unknown error"
+                QMessageBox.warning(
+                    self,
+                    "Configuration Failed",
+                    f"Failed to configure ngrok authtoken:\n\n{error_msg}\n\n"
+                    "Make sure ngrok is installed. Install pyngrok with:\n"
+                    "pip install pyngrok"
+                )
+                self.log(f"✗ Ngrok config failed: {error_msg}")
+                
+        except FileNotFoundError:
+            # ngrok command not found - try using pyngrok's ngrok binary
+            try:
+                from pyngrok import conf, installer
+                
+                # Ensure ngrok is installed
+                ngrok_path = conf.get_default().ngrok_path
+                installer.install_ngrok(ngrok_path)
+                
+                # Run config with pyngrok's ngrok
+                result = subprocess.run(
+                    [ngrok_path, 'config', 'add-authtoken', authtoken],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0:
+                    QMessageBox.information(
+                        self,
+                        "✅ Success",
+                        "Ngrok authtoken saved successfully!\n\n"
+                        "You can now enable Relay Server Mode for internet access.\n"
+                        "If server is already running, disable and re-enable it to apply changes."
+                    )
+                    self.log("✓ Ngrok authtoken configured successfully")
+                    self.ngrok_authtoken_input.clear()
+                else:
+                    error_msg = result.stderr or result.stdout or "Unknown error"
+                    raise Exception(error_msg)
+                    
+            except Exception as e:
+                QMessageBox.warning(
+                    self,
+                    "Configuration Failed",
+                    f"Failed to configure ngrok:\n\n{str(e)}\n\n"
+                    "Make sure pyngrok is installed:\n"
+                    "pip install pyngrok"
+                )
+                self.log(f"✗ Ngrok config failed: {str(e)}")
+                
+        except subprocess.TimeoutExpired:
+            QMessageBox.warning(
+                self,
+                "Timeout",
+                "Ngrok configuration timed out. Please try again."
+            )
+            self.log("✗ Ngrok config timeout")
+            
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Unexpected error:\n\n{str(e)}"
+            )
+            self.log(f"✗ Ngrok config error: {str(e)}")
+    
+    def on_relay_server_status(self, status, color):
+        """Update relay server status display"""
+        if hasattr(self, 'clan_server_status_label'):
+            self.clan_server_status_label.setText(status)
+            self.clan_server_status_label.setStyleSheet(f"color: {color}; padding: 6px; background-color: #1a1a1a; border-radius: 6px;")
+    
+    def on_tunnel_url_ready(self, url):
+        """Handle ngrok tunnel URL"""
+        self.log(f"🌐 Public relay URL: {url}")
+        # We'll show this in the clan code export
+    
     def open_settings(self):
         """Open settings dialog"""
         dialog = SettingsDialog(self.config, self)
@@ -850,35 +1462,355 @@ class MainWindow(QMainWindow):
         )
         return urlsafe_b64encode(kdf.derive(password.encode()))
     
-    def show_clan_menu(self):
-        """Show clan code menu with export/import options"""
-        from PySide6.QtWidgets import QMenu
+    def export_server_code(self):
+        """Export relay server connection info"""
+        from PySide6.QtWidgets import QMessageBox, QDialog, QTextEdit
         
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                border: 1px solid #3e3e42;
-                padding: 4px;
-            }
-            QMenu::item {
-                padding: 8px 24px;
-                background-color: transparent;
-            }
-            QMenu::item:selected {
-                background-color: #094771;
+        if not self.config.get("server_mode_enabled", False):
+            QMessageBox.warning(
+                self,
+                "Server Mode Disabled",
+                "Please enable 'Relay Server Mode' in the Core tab first."
+            )
+            return
+        
+        # Get connection info
+        conn_info = self.relay_server.get_connection_info()
+        
+        if not conn_info['public']:
+            # No public URL - offer local network option
+            result = QMessageBox.question(
+                self,
+                "No Public Access",
+                "⚠️ Ngrok tunnel not available (not configured or failed to start).\n\n"
+                "Your relay server is running on LOCAL NETWORK ONLY.\n"
+                "Clan members must be on the same WiFi/LAN to connect.\n\n"
+                f"Local URL: {conn_info['local']}\n\n"
+                "Options:\n"
+                "• Continue - Export local network code (same WiFi only)\n"
+                "• Cancel - Set up ngrok for internet access\n\n"
+                "To set up ngrok:\n"
+                "1. Sign up: https://dashboard.ngrok.com/signup\n"
+                "2. Get authtoken: https://dashboard.ngrok.com/get-started/your-authtoken\n"
+                "3. Run: ngrok config add-authtoken YOUR_TOKEN\n"
+                "4. Restart server mode\n\n"
+                "Continue with local network only?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if result != QMessageBox.Yes:
+                return
+            
+            # Use local network URL
+            server_url = conn_info['local']
+        else:
+            server_url = conn_info['public']
+        
+        # Create server code
+        import base64
+        server_data = {
+            'type': 'relay_server',
+            'url': server_url,
+            'version': 1
+        }
+        
+        # Obfuscate: base64 encode the JSON
+        server_json = json.dumps(server_data)
+        obfuscated = base64.b64encode(server_json.encode()).decode('utf-8')
+        
+        # Wrap with headers
+        server_code = (
+            "-----BEGIN RUSTPLUS SERVER CODE-----\n"
+            f"{obfuscated}\n"
+            "-----END RUSTPLUS SERVER CODE-----"
+        )
+        
+        # Show dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Server Code Generated")
+        dialog.setMinimumWidth(600)
+        dialog.setMinimumHeight(300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        network_type = "🌐 Internet (Public)" if conn_info['public'] else "🏠 Local Network Only"
+        label = QLabel(f"✅ Server Code Created!\n\nNetwork: {network_type}\nShare this code with your clan members.\n\nLocal: {conn_info['local']}\nPublic: {conn_info['public'] or 'Not available'}")
+        label.setFont(QFont("Segoe UI", 11))
+        label.setStyleSheet("color: #28a745; padding: 10px;")
+        layout.addWidget(label)
+        
+        code_display = QTextEdit()
+        code_display.setPlainText(server_code)
+        code_display.setReadOnly(True)
+        code_display.setFont(QFont("Consolas", 10))
+        code_display.setStyleSheet("""
+            QTextEdit {
+                background-color: #111214;
+                color: #00ff00;
+                border: 2px solid #28a745;
+                border-radius: 8px;
+                padding: 12px;
             }
         """)
+        layout.addWidget(code_display)
         
-        export_action = menu.addAction("📤 Export Clan Code")
-        export_action.triggered.connect(self.export_clan_code)
+        # Show password hint if password is set
+        password_hint = ""
+        if self.config.get("server_password"):
+            password_hint = f"\n\n🔒 Password: {self.config.get('server_password')}\n(Share this password with your clan!)"
         
-        import_action = menu.addAction("📥 Import Clan Code")
-        import_action.triggered.connect(self.import_clan_code)
+        hint = QLabel(f"💡 Clan members import this code to connect to YOUR relay server.\nThey don't need Telegram bot setup - they connect to you!{password_hint}")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #17a2b8; padding: 10px;")
+        layout.addWidget(hint)
         
-        # Show menu at button position
-        menu.exec(QCursor.pos())
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+        self.log("✓ Server code exported")
+    
+    def import_server_code(self):
+        """Import relay server connection info and connect"""
+        from PySide6.QtWidgets import QMessageBox, QDialog, QTextEdit, QLabel
+        
+        # Create input dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Import Server Code")
+        dialog.setMinimumWidth(600)
+        dialog.setMinimumHeight(300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        label = QLabel("Paste the server code below:")
+        label.setFont(QFont("Segoe UI", 11))
+        label.setStyleSheet("color: #d4d4d4; padding: 10px;")
+        layout.addWidget(label)
+        
+        code_input = QTextEdit()
+        code_input.setPlaceholderText("Paste server code here...")
+        code_input.setFont(QFont("Consolas", 10))
+        code_input.setStyleSheet("""
+            QTextEdit {
+                background-color: #111214;
+                color: #d4d4d4;
+                border: 2px solid #17a2b8;
+                border-radius: 8px;
+                padding: 12px;
+            }
+        """)
+        layout.addWidget(code_input)
+        
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        if dialog.exec() != QDialog.Accepted:
+            return
+        
+        server_code = code_input.toPlainText().strip()
+        if not server_code:
+            return
+        
+        try:
+            # Remove header/footer if present and extract base64 content
+            import base64
+            
+            server_code_clean = server_code.strip()
+            
+            if "-----BEGIN RUSTPLUS SERVER CODE-----" in server_code_clean:
+                # Extract content between headers
+                lines = server_code_clean.split('\n')
+                code_lines = []
+                in_content = False
+                
+                for line in lines:
+                    if "-----BEGIN RUSTPLUS SERVER CODE-----" in line:
+                        in_content = True
+                        continue
+                    elif "-----END RUSTPLUS SERVER CODE-----" in line:
+                        break
+                    elif in_content:
+                        code_lines.append(line.strip())
+                
+                obfuscated = ''.join(code_lines)
+                # Decode from base64 to get original JSON
+                decoded = base64.b64decode(obfuscated).decode('utf-8')
+                server_data = json.loads(decoded)
+            else:
+                # Legacy format - plain JSON
+                server_data = json.loads(server_code_clean)
+            
+            if server_data.get('type') != 'relay_server':
+                raise ValueError("Invalid server code type")
+            
+            server_url = server_data.get('url')
+            if not server_url:
+                raise ValueError("Missing server URL")
+            
+            # Confirm
+            result = QMessageBox.question(
+                self,
+                "Confirm Import",
+                f"Connect to relay server:\n{server_url}\n\nYou will receive alerts from this server instead of directly from Telegram.\n\nContinue?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if result != QMessageBox.Yes:
+                return
+            
+            # Ask for password if server requires it
+            password = self.show_password_dialog(
+                "Server Password",
+                "Enter relay server password:\n(If the server has no password, leave blank)"
+            )
+            
+            if password is None:  # User cancelled
+                return
+            
+            # Disconnect existing client if any
+            if self.relay_client:
+                self.relay_client.disconnect()
+            
+            # Create and connect new client
+            self.relay_client = RelayClient(server_url, password=password if password else None)
+            self.relay_client.message_received.connect(self.on_relay_message)
+            self.relay_client.status_changed.connect(self.on_relay_client_status)
+            self.relay_client.connect()
+            
+            # Save to config
+            self.config["relay_client_server"] = server_url
+            if password:
+                self.config["relay_client_password"] = password
+            self.config["relay_mode"] = True  # Mark as using relay mode
+            self.save_config()
+            
+            # Update UI mode status
+            self.update_connection_mode_status()
+            
+            QMessageBox.information(
+                self,
+                "Connected",
+                f"Successfully connected to relay server!\n\n✅ You are now in RELAY MODE\n\nAlerts will come from the relay server instead of direct Telegram.\nYour Telegram service will be stopped to avoid conflicts."
+            )
+            
+            # Stop Telegram service when in relay mode
+            self.telegram_service.stop()
+            
+            self.log(f"✓ Connected to relay server: {server_url}")
+            self.log("ℹ️ Switched to Relay Mode - Telegram service stopped")
+            
+        except json.JSONDecodeError:
+            QMessageBox.critical(self, "Invalid Code", "The server code is not valid JSON")
+        except Exception as e:
+            QMessageBox.critical(self, "Import Failed", f"Failed to import server code:\n{str(e)}")
+            self.log(f"✗ Server code import failed: {str(e)}")
+    
+    def on_relay_message(self, message):
+        """Handle message received from relay client"""
+        self.log(f"📨 Relay message received: {message[:50]}...")
+        
+        # Notify all enabled plugins (same as Telegram message)
+        for plugin in self.plugins:
+            try:
+                plugin_name = plugin.get_name()
+                if self.plugin_enabled.get(plugin_name, True):
+                    plugin.on_telegram_message(message)
+            except Exception as e:
+                self.log(f"✗ Plugin {plugin.get_name()} error: {str(e)}")
+    
+    def on_relay_client_status(self, status, color):
+        """Update relay client status"""
+        self.log(f"🌐 Relay: {status}")
+    
+    def disconnect_from_relay(self):
+        """Disconnect from relay server and switch back to direct Telegram"""
+        from PySide6.QtWidgets import QMessageBox
+        
+        result = QMessageBox.question(
+            self,
+            "Switch to Direct Telegram",
+            "Disconnect from relay server and switch back to direct Telegram mode?\n\n"
+            "✅ Your Telegram service will restart\n"
+            "✅ You'll receive alerts directly from Telegram bot\n\n"
+            "Continue?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if result != QMessageBox.Yes:
+            return
+        
+        # Disconnect relay client
+        if self.relay_client:
+            self.relay_client.disconnect()
+            self.relay_client = None
+        
+        # Remove from config
+        self.config.pop("relay_client_server", None)
+        self.config.pop("relay_client_password", None)
+        self.config["relay_mode"] = False
+        self.save_config()
+        
+        # Restart Telegram service
+        self.telegram_service.start()
+        
+        # Update UI
+        self.update_connection_mode_status()
+        
+        self.log("✓ Disconnected from relay server")
+        self.log("✓ Switched back to Direct Telegram Mode")
+        
+        QMessageBox.information(
+            self,
+            "Switched to Direct Telegram",
+            "✅ Successfully switched to Direct Telegram Mode\n\n"
+            "Your Telegram service is now active and receiving alerts directly."
+        )
+    
+    def restore_relay_connection(self):
+        """Restore relay client connection on app startup"""
+        server_url = self.config.get("relay_client_server")
+        password = self.config.get("relay_client_password")
+        
+        if not server_url:
+            return
+        
+        try:
+            self.log(f"🔄 Restoring relay connection to: {server_url}")
+            
+            # Create and connect relay client
+            self.relay_client = RelayClient(server_url, password=password if password else None)
+            self.relay_client.message_received.connect(self.on_relay_message)
+            self.relay_client.status_changed.connect(self.on_relay_client_status)
+            self.relay_client.connect()
+            
+            self.log(f"✓ Relay connection restored")
+            
+        except Exception as e:
+            self.log(f"✗ Failed to restore relay connection: {str(e)}")
+            # If restore fails, switch back to direct Telegram
+            self.config["relay_mode"] = False
+            self.save_config()
+            self.telegram_service.start()
+    
+    def update_connection_mode_status(self):
+        """Update the connection mode status display"""
+        if not hasattr(self, 'clan_mode_status'):
+            return
+            
+        if self.config.get("relay_mode", False) and self.config.get("relay_client_server"):
+            # Relay mode
+            server_url = self.config.get("relay_client_server", "unknown")
+            self.clan_mode_status.setText(f"🔹 Relay Mode - Connected to: {server_url}")
+            self.clan_mode_status.setStyleSheet("color: #6c42f5; padding: 8px; background-color: #1a1a1a; border-radius: 6px; font-size: 11pt;")
+            self.disconnect_relay_btn.show()
+        else:
+            # Direct Telegram mode
+            self.clan_mode_status.setText("🔹 Direct Telegram Mode")
+            self.clan_mode_status.setStyleSheet("color: #17a2b8; padding: 8px; background-color: #1a1a1a; border-radius: 6px; font-size: 11pt;")
+            self.disconnect_relay_btn.hide()
     
     def export_clan_code(self):
         """Export Telegram settings as encrypted clan code"""
@@ -955,7 +1887,17 @@ class MainWindow(QMainWindow):
             key = self.generate_clan_key(password)
             fernet = Fernet(key)
             encrypted = fernet.encrypt(json.dumps(clan_data).encode())
-            clan_code = encrypted.decode('utf-8')
+            
+            # Obfuscate further: base64 encode the encrypted data and add metadata wrapper
+            import base64
+            obfuscated = base64.b64encode(encrypted).decode('utf-8')
+            
+            # Create wrapped clan code with header/footer to make it look more official
+            clan_code = (
+                "-----BEGIN RUSTPLUS CLAN CODE-----\n"
+                f"{obfuscated}\n"
+                "-----END RUSTPLUS CLAN CODE-----"
+            )
             
             # Show dialog with clan code
             dialog = QDialog(self)
@@ -1106,10 +2048,38 @@ class MainWindow(QMainWindow):
             return
         
         try:
+            # Remove header/footer if present and extract base64 content
+            import base64
+            
+            # Strip whitespace and check for headers
+            clan_code_clean = clan_code.strip()
+            
+            if "-----BEGIN RUSTPLUS CLAN CODE-----" in clan_code_clean:
+                # Extract content between headers
+                lines = clan_code_clean.split('\n')
+                code_lines = []
+                in_content = False
+                
+                for line in lines:
+                    if "-----BEGIN RUSTPLUS CLAN CODE-----" in line:
+                        in_content = True
+                        continue
+                    elif "-----END RUSTPLUS CLAN CODE-----" in line:
+                        break
+                    elif in_content:
+                        code_lines.append(line.strip())
+                
+                obfuscated = ''.join(code_lines)
+                # Decode from base64 to get original encrypted bytes
+                encrypted_bytes = base64.b64decode(obfuscated)
+            else:
+                # Legacy format or raw encrypted data
+                encrypted_bytes = clan_code_clean.encode()
+            
             # Decrypt the clan code
             key = self.generate_clan_key(password)
             fernet = Fernet(key)
-            decrypted = fernet.decrypt(clan_code.encode())
+            decrypted = fernet.decrypt(encrypted_bytes)
             clan_data = json.loads(decrypted.decode('utf-8'))
             
             # Validate data
@@ -1314,6 +2284,14 @@ class MainWindow(QMainWindow):
         """Handle application close"""
         print("[App] Closing application...")
         self.telegram_service.stop()
+        
+        # Stop relay server if running
+        if self.relay_server:
+            self.relay_server.stop()
+        
+        # Disconnect relay client if connected
+        if self.relay_client:
+            self.relay_client.disconnect()
         
         # Wait for thread to finish
         if self.telegram_service.isRunning():

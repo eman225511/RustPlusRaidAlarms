@@ -182,8 +182,25 @@ class TelegramService(QThread):
                 error_msg = str(e)
                 print(f"[Telegram] Polling TelegramError: {error_msg}")
                 
+                # Handle conflict error (multiple instances using same bot)
+                if "Conflict" in error_msg and "getUpdates" in error_msg:
+                    self.status_changed.emit("⚠ Shared bot detected - waiting for other instances...", "#ffaa00")
+                    print("[Telegram] Conflict: Multiple instances detected. Waiting 30 seconds before retry...")
+                    # Wait longer to let other instance finish or timeout
+                    time.sleep(30)
+                    # Clear any pending updates to resolve conflict
+                    try:
+                        self.loop.run_until_complete(
+                            asyncio.wait_for(
+                                self.bot.get_updates(offset=-1, timeout=1),
+                                timeout=5.0
+                            )
+                        )
+                    except:
+                        pass
+                    continue
                 # Connection issues - try to restart
-                if "Connection" in error_msg or "Network" in error_msg or "Timeout" in error_msg:
+                elif "Connection" in error_msg or "Network" in error_msg or "Timeout" in error_msg:
                     self.status_changed.emit(f"⚠ Connection lost: {error_msg[:40]} - restarting...", "#ffaa00")
                     print("[Telegram] Connection lost, attempting restart...")
                     self.restart_service()
