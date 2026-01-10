@@ -342,14 +342,14 @@ class MainWindow(QMainWindow):
         self.start_btn.setFont(QFont("Segoe UI", 11))
         self.start_btn.setMinimumHeight(42)
         self.start_btn.setStyleSheet(self.get_button_style("#0e639c"))
-        self.start_btn.clicked.connect(self.telegram_service.start)
+        self.start_btn.clicked.connect(self.on_start_clicked)
         button_layout.addWidget(self.start_btn)
 
         self.stop_btn = QPushButton("⏸ Stop")
         self.stop_btn.setFont(QFont("Segoe UI", 11))
         self.stop_btn.setMinimumHeight(42)
         self.stop_btn.setStyleSheet(self.get_button_style("#c50f1f"))
-        self.stop_btn.clicked.connect(self.telegram_service.stop)
+        self.stop_btn.clicked.connect(self.on_stop_clicked)
         button_layout.addWidget(self.stop_btn)
 
         settings_btn = QPushButton("⚙ Settings")
@@ -1172,6 +1172,26 @@ class MainWindow(QMainWindow):
                     plugin.on_telegram_message(message)
             except Exception as e:
                 self.log(f"✗ Plugin {plugin.get_name()} error: {str(e)}")
+    
+    def on_start_clicked(self):
+        """Handle start button click - starts appropriate service based on mode"""
+        if self.config.get("relay_mode", False) and self.relay_client:
+            # Relay mode - reconnect relay client
+            self.relay_client.connect()
+            self.log("🔄 Reconnecting to relay server...")
+        else:
+            # Direct Telegram mode
+            self.telegram_service.start()
+    
+    def on_stop_clicked(self):
+        """Handle stop button click - stops appropriate service based on mode"""
+        if self.config.get("relay_mode", False) and self.relay_client:
+            # Relay mode - disconnect relay client
+            self.relay_client.disconnect()
+            self.log("⏸ Disconnected from relay server")
+        else:
+            # Direct Telegram mode
+            self.telegram_service.stop()
     
     def on_telegram_status(self, status, color):
         """Update Telegram status display"""
