@@ -6,7 +6,8 @@ Launches Rust and connects to a server when raid alert is received
 import subprocess
 import os
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, 
-                                QLineEdit, QLabel, QPushButton, QMessageBox, QFrame)
+                                QLineEdit, QLabel, QPushButton, QMessageBox, QFrame,
+                                QListWidget, QListWidgetItem)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from plugin_base import PluginBase
@@ -18,9 +19,9 @@ class Plugin(PluginBase):
         super().__init__(telegram_service, config)
         self.enabled = False
         
-        # Default settings
-        self.server_ip = self.config.get("rust_server_ip", "192.168.1.50")
-        self.server_port = self.config.get("rust_server_port", "28015")
+        # Server list - list of dicts with name, ip, port
+        self.servers = self.config.get("rust_servers", [])
+        self.selected_server_index = self.config.get("rust_selected_server", -1)
         
         # Create widget
         self._widget = None
@@ -92,45 +93,90 @@ class Plugin(PluginBase):
         
         layout.addWidget(header)
         
-        # Server Configuration Group
-        server_group = QGroupBox("Server Configuration")
+        # Server List Group
+        server_group = QGroupBox("Server List")
         server_group.setFont(QFont("Segoe UI", 11, QFont.Bold))
         server_group.setStyleSheet(self.get_groupbox_style())
         server_layout = QVBoxLayout(server_group)
         
-        # Server IP
-        ip_row = QHBoxLayout()
-        ip_label = QLabel("Server IP:")
-        ip_label.setMinimumWidth(120)
-        ip_label.setFont(QFont("Segoe UI", 10))
-        ip_row.addWidget(ip_label)
+        # Server list widget
+        self.server_list = QListWidget()
+        self.server_list.setMinimumHeight(150)
+        self.server_list.setStyleSheet("""
+            QListWidget {
+                background-color: #1e1e1e;
+                border: 1px solid #3e3e42;
+                border-radius: 6px;
+                padding: 4px;
+                color: #d4d4d4;
+            }
+            QListWidget::item {
+                padding: 8px;
+                border-radius: 4px;
+            }
+            QListWidget::item:selected {
+                background-color: #094771;
+                color: #ffffff;
+            }
+            QListWidget::item:hover {
+                background-color: #2a2d2e;
+            }
+        """)
+        self.server_list.itemSelectionChanged.connect(self.on_server_selected)
+        server_layout.addWidget(self.server_list)
         
-        self.ip_input = QLineEdit()
-        self.ip_input.setText(self.server_ip)
-        self.ip_input.setPlaceholderText("192.168.1.50 or play.example.com")
-        self.ip_input.setMinimumHeight(32)
-        self.ip_input.textChanged.connect(self.on_ip_changed)
-        ip_row.addWidget(self.ip_input)
+        # Add/Remove buttons
+        button_row = QHBoxLayout()
         
-        server_layout.addLayout(ip_row)
+        add_btn = QPushButton("➕ Add Server")
+        add_btn.setFont(QFont("Segoe UI", 10))
+        add_btn.setMinimumHeight(36)
+        add_btn.setStyleSheet(self.get_button_style("#28a745"))
+        add_btn.clicked.connect(self.add_server)
+        button_row.addWidget(add_btn)
         
-        # Server Port
-        port_row = QHBoxLayout()
-        port_label = QLabel("Server Port:")
-        port_label.setMinimumWidth(120)
-        port_label.setFont(QFont("Segoe UI", 10))
-        port_row.addWidget(port_label)
+        remove_btn = QPushButton("➖ Remove Server")
+        remove_btn.setFont(QFont("Segoe UI", 10))
+        remove_btn.setMinimumHeight(36)
+        remove_btn.setStyleSheet(self.get_button_style("#dc3545"))
+        remove_btn.clicked.connect(self.remove_server)
+        button_row.addWidget(remove_btn)
         
-        self.port_input = QLineEdit()
-        self.port_input.setText(self.server_port)
-        self.port_input.setPlaceholderText("28015")
-        self.port_input.setMinimumHeight(32)
-        self.port_input.textChanged.connect(self.on_port_changed)
-        port_row.addWidget(self.port_input)
+        server_layout.addLayout(button_row)
         
-        server_layout.addLayout(port_row)
+        # Info label
+        info_label = QLabel("Select one server from the list - it will be used when raid alerts are received")
+        info_label.setFont(QFont("Segoe UI", 9))
+        info_label.setStyleSheet("color: #888888; padding: 4px;")
+        info_label.setWordWrap(True)
+        server_layout.addWidget(info_label)
         
         layout.addWidget(server_group)
+        
+        # Load servers into list
+        self.refresh_server_list()
+        
+        # Selected Server Display
+        selected_frame = QFrame()
+        selected_frame.setObjectName("card")
+        selected_layout = QVBoxLayout(selected_frame)
+        selected_layout.setContentsMargins(16, 12, 16, 12)
+        
+        selected_header = QLabel("Currently Selected Server:")
+        selected_header.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        selected_header.setStyleSheet("color: #b8b8b8;")
+        selected_layout.addWidget(selected_header)
+        
+        self.selected_label = QLabel("No server selected")
+        self.selected_label.setFont(QFont("Segoe UI", 12))
+        self.selected_label.setStyleSheet("color: #ffa500; padding: 8px;")
+        self.selected_label.setWordWrap(True)
+        selected_layout.addWidget(self.selected_label)
+        
+        layout.addWidget(selected_frame)
+        
+        # Update the selected label to show current selection
+        self.update_selected_display()
         
         # Test Button
         test_frame = QFrame()
@@ -157,33 +203,168 @@ class Plugin(PluginBase):
         
         return widget
     
-    def on_ip_changed(self, text):
-        """Update server IP"""
-        self.server_ip = text
-        self.config["rust_server_ip"] = text
+    def refresh_server_list(self):
+        """Refresh the server list widget"""
+        self.server_list.clear()
+        
+        for i, server in enumerate(self.servers):
+            name = server.get("name", "Unnamed")
+            ip = server.get("ip", "")
+            port = server.get("port", "28015")
+            
+            item = QListWidgetItem(f"{name} - {ip}:{port}")
+            self.server_list.addItem(item)
+            
+            # Select the previously selected server
+            if i == self.selected_server_index:
+                self.server_list.setCurrentRow(i)
     
-    def on_port_changed(self, text):
-        """Update server port"""
-        self.server_port = text
-        self.config["rust_server_port"] = text
+    def add_server(self):
+        """Add a new server to the list"""
+        from PySide6.QtWidgets import QDialog, QFormLayout, QDialogButtonBox
+        
+        dialog = QDialog(self._widget)
+        dialog.setWindowTitle("Add Server")
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        form = QFormLayout()
+        
+        # Server name
+        name_input = QLineEdit()
+        name_input.setPlaceholderText("My Server")
+        name_input.setMinimumHeight(32)
+        form.addRow("Server Name:", name_input)
+        
+        # Server IP
+        ip_input = QLineEdit()
+        ip_input.setPlaceholderText("192.168.1.50 or play.example.com")
+        ip_input.setMinimumHeight(32)
+        form.addRow("Server IP:", ip_input)
+        
+        # Server Port
+        port_input = QLineEdit()
+        port_input.setText("28015")
+        port_input.setPlaceholderText("28015")
+        port_input.setMinimumHeight(32)
+        form.addRow("Server Port:", port_input)
+        
+        layout.addLayout(form)
+        
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+        
+        if dialog.exec() == QDialog.Accepted:
+            name = name_input.text().strip()
+            ip = ip_input.text().strip()
+            port = port_input.text().strip()
+            
+            if not name:
+                QMessageBox.warning(self._widget, "Missing Name", "Please enter a server name")
+                return
+            
+            if not ip:
+                QMessageBox.warning(self._widget, "Missing IP", "Please enter a server IP address")
+                return
+            
+            if not port:
+                port = "28015"
+            
+            # Add to list
+            self.servers.append({
+                "name": name,
+                "ip": ip,
+                "port": port
+            })
+            
+            self.config["rust_servers"] = self.servers
+            self.refresh_server_list()
+            self.update_selected_display()
+    
+    def remove_server(self):
+        """Remove selected server from the list"""
+        current_row = self.server_list.currentRow()
+        
+        if current_row < 0:
+            QMessageBox.warning(self._widget, "No Selection", "Please select a server to remove")
+            return
+        
+        server = self.servers[current_row]
+        result = QMessageBox.question(
+            self._widget,
+            "Confirm Remove",
+            f"Remove server '{server['name']}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if result == QMessageBox.Yes:
+            self.servers.pop(current_row)
+            
+            # Update selected index
+            if self.selected_server_index == current_row:
+                self.selected_server_index = -1
+            elif self.selected_server_index > current_row:
+                self.selected_server_index -= 1
+            
+            self.config["rust_servers"] = self.servers
+            self.config["rust_selected_server"] = self.selected_server_index
+            self.refresh_server_list()
+            self.update_selected_display()
+    
+    def update_selected_display(self):
+        """Update the selected server display label"""
+        if not hasattr(self, 'selected_label'):
+            return
+            
+        if self.selected_server_index >= 0 and self.selected_server_index < len(self.servers):
+            server = self.servers[self.selected_server_index]
+            self.selected_label.setText(f"🎯 {server['name']} - {server['ip']}:{server['port']}")
+            self.selected_label.setStyleSheet("color: #44ff44; padding: 8px; font-weight: bold;")
+        else:
+            self.selected_label.setText("⚠️ No server selected - please select a server from the list")
+            self.selected_label.setStyleSheet("color: #ffa500; padding: 8px;")
+    
+    def on_server_selected(self):
+        """Called when a server is selected in the list"""
+        current_row = self.server_list.currentRow()
+        self.selected_server_index = current_row
+        self.config["rust_selected_server"] = current_row
+        
+        self.update_selected_display()
+        
+        if current_row >= 0 and current_row < len(self.servers):
+            server = self.servers[current_row]
+            if hasattr(self, 'status_label') and self.status_label:
+                self.status_label.setText(f"✓ Selected: {server['name']} ({server['ip']}:{server['port']})")
+                self.status_label.setStyleSheet("color: #44ff44; padding: 10px;")
     
     def test_connection(self):
         """Test launching Rust with current settings"""
-        if not self.validate_settings():
+        if self.selected_server_index < 0 or self.selected_server_index >= len(self.servers):
+            QMessageBox.warning(
+                self._widget,
+                "No Server Selected",
+                "Please select a server from the list first"
+            )
             return
+        
+        server = self.servers[self.selected_server_index]
         
         self.status_label.setText("🚀 Launching Rust...")
         self.status_label.setStyleSheet("color: #ffa500; padding: 10px;")
         
         try:
-            self.launch_rust()
-            self.status_label.setText("✅ Rust launched successfully!")
+            self.launch_rust(server)
+            self.status_label.setText(f"✅ Launched: {server['name']}")
             self.status_label.setStyleSheet("color: #44ff44; padding: 10px;")
             
             QMessageBox.information(
                 self._widget,
                 "Success",
-                f"Rust is launching and connecting to:\n{self.server_ip}:{self.server_port}\n\nCheck your game!"
+                f"Rust is launching and connecting to:\n{server['name']}\n{server['ip']}:{server['port']}\n\nCheck your game!"
             )
         except Exception as e:
             self.status_label.setText(f"❌ Launch failed")
@@ -197,23 +378,22 @@ class Plugin(PluginBase):
     
     def validate_settings(self):
         """Validate settings before launch"""
-        if not self.server_ip:
-            QMessageBox.warning(self._widget, "Missing Settings", "Please enter a server IP address")
+        if self.selected_server_index < 0 or self.selected_server_index >= len(self.servers):
             return False
-        
-        if not self.server_port:
-            QMessageBox.warning(self._widget, "Missing Settings", "Please enter a server port")
-            return False
-        
         return True
     
-    def launch_rust(self):
+    def launch_rust(self, server=None):
         """Launch Rust and connect to server using steam://run protocol"""
+        if server is None:
+            if not self.validate_settings():
+                return
+            server = self.servers[self.selected_server_index]
+        
         # Use steam://run/APPID//+connect%20IP:PORT
         # 252490 is Rust's Steam App ID
         # URL encode the +connect command
         rust_app_id = "252490"
-        connect_command = f"+connect%20{self.server_ip}:{self.server_port}"
+        connect_command = f"+connect%20{server['ip']}:{server['port']}"
         
         # Format: steam://run/252490//+connect%20IP:PORT
         steam_url = f"steam://run/{rust_app_id}//{connect_command}"
@@ -223,7 +403,7 @@ class Plugin(PluginBase):
         # Use os.startfile to open the steam:// URL
         os.startfile(steam_url)
         
-        print(f"[Rust Auto-Connect] Launched Rust connecting to {self.server_ip}:{self.server_port}")
+        print(f"[Rust Auto-Connect] Launched Rust connecting to {server['name']} ({server['ip']}:{server['port']})")
     
     def on_telegram_message(self, message: str):
         """Called when Telegram message received - launch Rust"""
@@ -233,16 +413,17 @@ class Plugin(PluginBase):
             print("[Rust Auto-Connect] Plugin is disabled, skipping")
             return
         
-        print(f"[Rust Auto-Connect] Raid alert received! Launching Rust...")
-        
         if not self.validate_settings():
-            print("[Rust Auto-Connect] Invalid settings, skipping launch")
+            print("[Rust Auto-Connect] No server selected, skipping launch")
             return
         
+        server = self.servers[self.selected_server_index]
+        print(f"[Rust Auto-Connect] Raid alert received! Launching Rust to {server['name']}...")
+        
         try:
-            self.launch_rust()
+            self.launch_rust(server)
             if hasattr(self, 'status_label') and self.status_label:
-                self.status_label.setText(f"🚀 Launched Rust at {self.server_ip}:{self.server_port}")
+                self.status_label.setText(f"🚀 Launched: {server['name']}")
                 self.status_label.setStyleSheet("color: #44ff44; padding: 10px;")
         except Exception as e:
             print(f"[Rust Auto-Connect] Error launching Rust: {e}")
