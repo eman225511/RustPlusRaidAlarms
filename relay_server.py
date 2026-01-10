@@ -117,6 +117,22 @@ class RelayServer(QObject):
                 print("[Relay Server] Without ngrok, your server only works on local network.")
                 print("[Relay Server] Clan members must be on same WiFi/LAN to connect.")
                 print("[Relay Server] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            elif "ERR_NGROK_108" in error_msg or "simultaneous ngrok agent sessions" in error_msg:
+                msg = "⚠ Multiple ngrok sessions detected - server running locally only"
+                self.status_changed.emit(msg, "#ffaa00")
+                print("[Relay Server] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                print("[Relay Server] ⚠️  MULTIPLE NGROK SESSIONS DETECTED")
+                print("[Relay Server] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                print("[Relay Server] ")
+                print("[Relay Server] You have another ngrok tunnel running.")
+                print("[Relay Server] ")
+                print("[Relay Server] Options:")
+                print("[Relay Server] 1. Close other ngrok sessions: https://dashboard.ngrok.com/agents")
+                print("[Relay Server] 2. Run 'taskkill /F /IM ngrok.exe' in terminal to stop all tunnels")
+                print("[Relay Server] 3. Upgrade to paid plan for multiple simultaneous tunnels")
+                print("[Relay Server] ")
+                print("[Relay Server] Server will run on local network only until resolved.")
+                print("[Relay Server] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
             else:
                 msg = f"⚠ Tunnel error - server running locally only"
                 self.status_changed.emit(msg, "#ffaa00")
@@ -225,7 +241,7 @@ class RelayServer(QObject):
             try:
                 client['socket'].sendall(packet_length + packet)
             except Exception as e:
-                print(f"[Relay Server] Failed to send to {client['address']}: {e}")
+                print(f"[Relay Server] ❌ Client disconnected: {client['address']} (error: {e})")
                 disconnected.append(client)
         
         # Remove disconnected clients
@@ -237,19 +253,35 @@ class RelayServer(QObject):
                 pass
         
         if disconnected:
-            self.status_changed.emit(f"✓ {len(self.clients)} client(s) connected", "#00ff00")
+            if len(self.clients) == 0:
+                self.status_changed.emit("⚠ No clients connected", "#ffaa00")
+            else:
+                self.status_changed.emit(f"✓ {len(self.clients)} client(s) connected", "#00ff00")
     
     def stop(self):
         """Stop the relay server"""
         print("[Relay Server] Stopping...")
         self.running = False
         
+        # Stop ngrok first (before closing sockets)
+        try:
+            from pyngrok import ngrok
+            print("[Relay Server] Killing ngrok tunnels...")
+            ngrok.kill()
+            import time
+            time.sleep(0.5)  # Give ngrok time to cleanup
+        except Exception as e:
+            print(f"[Relay Server] Ngrok cleanup error (can be ignored): {e}")
+        
         # Close all client connections
-        for client in self.clients:
-            try:
-                client['socket'].close()
-            except:
-                pass
+        if self.clients:
+            print(f"[Relay Server] Disconnecting {len(self.clients)} client(s)...")
+            for client in self.clients:
+                try:
+                    print(f"[Relay Server] ❌ Disconnecting client: {client['address']}")
+                    client['socket'].close()
+                except:
+                    pass
         self.clients = []
         
         # Close server socket
@@ -259,17 +291,12 @@ class RelayServer(QObject):
             except:
                 pass
         
-        # Stop ngrok
-        if self.ngrok_process:
-            try:
-                from pyngrok import ngrok
-                ngrok.kill()
-            except:
-                pass
-        
         # Wait for thread
         if self.server_thread and self.server_thread.is_alive():
             self.server_thread.join(timeout=2)
+        
+        self.ngrok_process = None
+        self.public_url = None
         
         self.status_changed.emit("⏸ Server stopped", "#888888")
         print("[Relay Server] Stopped")
@@ -430,6 +457,8 @@ class RelayClient(QObject):
                 # Read packet length (4 bytes)
                 length_data = self._recv_exact(4)
                 if not length_data:
+                    print("[Relay Client] ❌ Server closed connection")
+                    self.status_changed.emit("❌ Server disconnected", "#ff4444")
                     break
                 
                 packet_length = int.from_bytes(length_data, 'big')
@@ -437,6 +466,8 @@ class RelayClient(QObject):
                 # Read packet data
                 packet_data = self._recv_exact(packet_length)
                 if not packet_data:
+                    print("[Relay Client] ❌ Connection lost (incomplete packet)")
+                    self.status_changed.emit("❌ Connection lost", "#ff4444")
                     break
                 
                 # Parse packet
@@ -447,8 +478,8 @@ class RelayClient(QObject):
                     
             except Exception as e:
                 if self.running:
-                    print(f"[Relay Client] Receive error: {e}")
-                    self.status_changed.emit(f"❌ Connection lost", "#ff4444")
+                    print(f"[Relay Client] ❌ Receive error: {e}")
+                    self.status_changed.emit(f"❌ Connection lost: {str(e)}", "#ff4444")
                 break
         
         self.running = False
