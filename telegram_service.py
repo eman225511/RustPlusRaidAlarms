@@ -178,8 +178,31 @@ class TelegramService(QThread):
             except asyncio.TimeoutError:
                 # Normal timeout, continue
                 pass
+            except TelegramError as e:
+                error_msg = str(e)
+                print(f"[Telegram] Polling TelegramError: {error_msg}")
+                
+                # Connection issues - try to restart
+                if "Connection" in error_msg or "Network" in error_msg or "Timeout" in error_msg:
+                    self.status_changed.emit(f"⚠ Connection lost: {error_msg[:40]} - restarting...", "#ffaa00")
+                    print("[Telegram] Connection lost, attempting restart...")
+                    self.restart_service()
+                    return
+                else:
+                    self.status_changed.emit(f"⚠ Polling error: {error_msg[:30]}", "#ffaa00")
+                    
             except Exception as e:
-                self.status_changed.emit(f"⚠ Polling error: {str(e)[:30]}", "#ffaa00")
+                error_msg = str(e)
+                print(f"[Telegram] Polling Exception: {error_msg}")
+                
+                # Check for connection-related errors
+                if any(keyword in error_msg.lower() for keyword in ["connection", "network", "timeout", "unreachable", "failed to connect"]):
+                    self.status_changed.emit(f"⚠ Connection lost: {error_msg[:40]} - restarting...", "#ffaa00")
+                    print("[Telegram] Connection lost, attempting restart...")
+                    self.restart_service()
+                    return
+                else:
+                    self.status_changed.emit(f"⚠ Polling error: {error_msg[:30]}", "#ffaa00")
             
             # Interruptible sleep; respect live polling rate changes
             polling_rate = self.config.get("polling_rate", 2)
@@ -202,6 +225,44 @@ class TelegramService(QThread):
             self.wait(5000)  # Wait up to 5 seconds for thread to finish
         
         self.status_changed.emit("⏸ Stopped", "#888888")
+    
+    def restart_service(self):
+        """Restart the Telegram service after connection loss"""
+        print("[Telegram] Restarting service...")
+        self.running = False
+        
+        # Cleanup current loop
+        if self.loop:
+            try:
+                if self.loop.is_running():
+                    self.loop.call_soon_threadsafe(self.loop.stop)
+                
+                # Cancel pending tasks
+                pending = asyncio.all_tasks(self.loop)
+                for task in pending:
+                    task.cancel()
+                
+                if not self.loop.is_closed():
+                    self.loop.close()
+            except Exception as e:
+                print(f"[Telegram] Error during restart cleanup: {e}")
+        
+        self.loop = None
+        
+        # Wait a bit before restarting
+        time.sleep(3)
+        
+        # Restart by calling run in a new thread
+        if not self.isRunning():
+            print("[Telegram] Starting new connection thread...")
+            self.start()
+        else:
+            print("[Telegram] Thread still running, waiting for it to stop...")
+            self.quit()
+            self.wait(5000)
+            if not self.isRunning():
+                print("[Telegram] Thread stopped, starting new connection...")
+                self.start()
     
     def retry_connection(self, delay_seconds):
         """Retry connection after a delay"""
