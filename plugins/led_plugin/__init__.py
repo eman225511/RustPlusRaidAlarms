@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
+    QComboBox,
     QPushButton,
     QLineEdit,
     QSpinBox,
@@ -35,6 +36,7 @@ class Plugin(PluginBase):
         self.widget: QWidget | None = None
         self.selected_color = self.config.get("color", "#ffffff")
         self.action_radios = {}
+        self.govee_devices = []  # cached device list after scan
         self.setup_controller()
 
     def get_name(self) -> str:
@@ -154,6 +156,7 @@ class Plugin(PluginBase):
         elif current_type == "hue":
             hue_radio.setChecked(True)
 
+        self.led_type_group.buttonClicked.connect(self.update_config_visibility)
         self.led_type_group.buttonClicked.connect(self.update_action_visibility)
         self.led_type_group.buttonClicked.connect(self.update_param_visibility)
         layout.addWidget(type_group)
@@ -294,6 +297,17 @@ class Plugin(PluginBase):
         self.govee_device_input = QLineEdit(self.config.get("govee_device_id", ""))
         device_row.addWidget(self.govee_device_input)
         govee_layout.addLayout(device_row)
+
+        # Device picker (populated after scan)
+        picker_row = QHBoxLayout()
+        picker_label = QLabel("Pick scanned:")
+        picker_label.setMinimumWidth(120)
+        picker_row.addWidget(picker_label)
+        self.govee_device_combo = QComboBox()
+        self.govee_device_combo.setPlaceholderText("Scan to list devices")
+        self.govee_device_combo.currentIndexChanged.connect(self.apply_govee_selection)
+        picker_row.addWidget(self.govee_device_combo)
+        govee_layout.addLayout(picker_row)
 
         model_row = QHBoxLayout()
         model_label = QLabel("Model:")
@@ -473,24 +487,25 @@ class Plugin(PluginBase):
                 QMessageBox.information(self.widget, "Govee Scan", "No devices found for this API key.")
                 return
 
-            first = devices[0]
-            device_id = first.get("device", "")
-            model = first.get("model", "")
-            self.govee_device_input.setText(device_id)
-            self.govee_model_input.setText(model)
-            self.config["govee_device_id"] = device_id
-            self.config["govee_model"] = model
-            self.config["govee_api_key"] = api_key
-            self.save_settings()
-
-            lines = []
+            # Populate combo box
+            self.govee_devices = devices
+            self.govee_device_combo.blockSignals(True)
+            self.govee_device_combo.clear()
             for d in devices:
-                lines.append(f"- {d.get('device','?')} (model {d.get('model','?')})")
+                label = f"{d.get('device','?')} (model {d.get('model','?')})"
+                self.govee_device_combo.addItem(label, userData=d)
+            self.govee_device_combo.setCurrentIndex(0)
+            self.govee_device_combo.blockSignals(False)
+
+            # Apply first device by default
+            self.apply_govee_selection(0)
+
+            lines = [f"- {d.get('device','?')} (model {d.get('model','?')})" for d in devices]
             summary = "\n".join(lines)
             QMessageBox.information(
                 self.widget,
                 "Govee Devices Found",
-                f"Found {len(devices)} device(s):\n{summary}\n\nFirst device applied to the form.",
+                f"Found {len(devices)} device(s):\n{summary}\n\nSelect the one you want from the dropdown.",
             )
 
         except requests.RequestException as exc:
@@ -499,6 +514,23 @@ class Plugin(PluginBase):
                 "Govee Scan",
                 f"Network error while scanning devices:\n{exc}",
             )
+
+    def apply_govee_selection(self, index: int):
+        """Apply selected Govee device from dropdown."""
+        if index < 0 or index >= len(self.govee_devices):
+            return
+        device = self.govee_devices[index]
+        device_id = device.get("device", "")
+        model = device.get("model", "")
+        self.govee_device_input.setText(device_id)
+        self.govee_model_input.setText(model)
+        if self.widget:  # only save when UI is active
+            self.config["govee_device_id"] = device_id
+            self.config["govee_model"] = model
+            api_key = self.govee_api_input.text().strip()
+            if api_key:
+                self.config["govee_api_key"] = api_key
+            self.save_settings()
 
     def pick_color(self):
         color = QColorDialog.getColor(QColor(self.selected_color), self.widget, "Pick LED Color")
