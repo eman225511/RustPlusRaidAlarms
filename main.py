@@ -271,15 +271,15 @@ class MainWindow(QMainWindow):
         hero_layout.setContentsMargins(16, 16, 16, 16)
         hero_layout.setSpacing(8)
 
-        title = QLabel("Telegram Listener")
-        title.setFont(QFont("Segoe UI", 22, QFont.Bold))
-        title.setStyleSheet("color: #ffffff;")
-        hero_layout.addWidget(title)
+        self.core_title = QLabel("Telegram Listener")
+        self.core_title.setFont(QFont("Segoe UI", 22, QFont.Bold))
+        self.core_title.setStyleSheet("color: #ffffff;")
+        hero_layout.addWidget(self.core_title)
 
-        subtitle = QLabel("Live raid alerts piped into plugins and actions")
-        subtitle.setFont(QFont("Segoe UI", 11))
-        subtitle.setStyleSheet("color: #b8b8b8;")
-        hero_layout.addWidget(subtitle)
+        self.core_subtitle = QLabel("Live raid alerts piped into plugins and actions")
+        self.core_subtitle.setFont(QFont("Segoe UI", 11))
+        self.core_subtitle.setStyleSheet("color: #b8b8b8;")
+        hero_layout.addWidget(self.core_subtitle)
 
         pill_row = QHBoxLayout()
         pill_row.setSpacing(10)
@@ -297,6 +297,21 @@ class MainWindow(QMainWindow):
         hero_layout.addLayout(pill_row)
 
         layout.addWidget(hero)
+
+        # Relay mode warning (hidden by default)
+        self.core_relay_warning = QFrame()
+        self.core_relay_warning.setObjectName("card")
+        self.core_relay_warning.setStyleSheet("QFrame#card { background-color: #2d2520; border: 1px solid #ffa500; }")
+        relay_warning_layout = QVBoxLayout(self.core_relay_warning)
+        relay_warning_layout.setContentsMargins(12, 12, 12, 12)
+        
+        relay_warning_label = QLabel("⚠️ <b>Relay Mode Active</b><br>You're connected to a relay server. Your local Telegram service is disabled.<br>These settings won't take effect until you disconnect from relay.")
+        relay_warning_label.setStyleSheet("color: #ffa500; font-size: 10pt;")
+        relay_warning_label.setWordWrap(True)
+        relay_warning_layout.addWidget(relay_warning_label)
+        
+        self.core_relay_warning.hide()
+        layout.addWidget(self.core_relay_warning)
 
         # Status + controls card
         status_frame = QFrame()
@@ -1806,11 +1821,29 @@ class MainWindow(QMainWindow):
             self.clan_mode_status.setText(f"🔹 Relay Mode - Connected to: {server_url}")
             self.clan_mode_status.setStyleSheet("color: #6c42f5; padding: 8px; background-color: #1a1a1a; border-radius: 6px; font-size: 11pt;")
             self.disconnect_relay_btn.show()
+            
+            # Update Core tab title
+            if hasattr(self, 'core_title') and hasattr(self, 'core_subtitle'):
+                self.core_title.setText("Relay Client")
+                self.core_subtitle.setText(f"Connected to relay server: {server_url}")
+            
+            # Show warning on Core tab
+            if hasattr(self, 'core_relay_warning'):
+                self.core_relay_warning.show()
         else:
             # Direct Telegram mode
             self.clan_mode_status.setText("🔹 Direct Telegram Mode")
             self.clan_mode_status.setStyleSheet("color: #17a2b8; padding: 8px; background-color: #1a1a1a; border-radius: 6px; font-size: 11pt;")
             self.disconnect_relay_btn.hide()
+            
+            # Update Core tab title
+            if hasattr(self, 'core_title') and hasattr(self, 'core_subtitle'):
+                self.core_title.setText("Telegram Listener")
+                self.core_subtitle.setText("Live raid alerts piped into plugins and actions")
+            
+            # Hide warning on Core tab
+            if hasattr(self, 'core_relay_warning'):
+                self.core_relay_warning.hide()
     
     def export_clan_code(self):
         """Export Telegram settings as encrypted clan code"""
