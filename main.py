@@ -116,6 +116,7 @@ class MainWindow(QMainWindow):
         self.tab_button_map = {}  # Map button IDs to (button, tab_index, plugin)
         self.plugin_enabled = {}  # Track enabled/disabled state per plugin
         self.show_example_plugins = self.config.get("show_example_plugins", False)
+        self.store_plugins_data = []  # cache of store metadata for search filtering
         
         # Setup UI
         self.setup_ui()
@@ -755,6 +756,150 @@ class MainWindow(QMainWindow):
         
         scroll.setWidget(widget)
         return scroll
+
+    def apply_store_filter(self):
+        """Filter and render plugin store list based on search text."""
+        if not hasattr(self, 'store_plugins_data'):
+            return
+
+        search_text = self.store_search.text().strip().lower() if hasattr(self, 'store_search') else ""
+
+        def matches_search(info):
+            if not search_text:
+                return True
+            haystack = " ".join([
+                info.get('name', ''),
+                info.get('author', ''),
+                info.get('description', ''),
+                " ".join(info.get('tags', []))
+            ]).lower()
+            return search_text in haystack
+
+        self.plugin_store_list.clear()
+        installed = self.get_installed_plugins()
+
+        for plugin_info in self.store_plugins_data:
+            if not matches_search(plugin_info):
+                continue
+
+            # Create list item
+            item = QListWidgetItem()
+
+            # Create widget for the item
+            item_widget = QWidget()
+            item_widget.setStyleSheet("background: transparent;")
+            item_widget.setMinimumHeight(130)
+            item_layout = QHBoxLayout(item_widget)
+            item_layout.setContentsMargins(12, 12, 12, 12)
+            item_layout.setSpacing(16)
+
+            # Icon
+            icon_label = QLabel(plugin_info.get("icon", "📦"))
+            icon_label.setFont(QFont("Segoe UI", 28))
+            icon_label.setFixedSize(50, 50)
+            icon_label.setAlignment(Qt.AlignCenter)
+            item_layout.addWidget(icon_label)
+
+            # Info section
+            info_layout = QVBoxLayout()
+            info_layout.setSpacing(6)
+
+            # Name and version
+            name_label = QLabel(f"<b>{plugin_info['name']}</b> <span style='color: #888;'>v{plugin_info['version']}</span>")
+            name_label.setFont(QFont("Segoe UI", 14))
+            name_label.setStyleSheet("color: #e6e6e6;")
+            info_layout.addWidget(name_label)
+
+            # Author
+            author_label = QLabel(f"by {plugin_info.get('author', 'Unknown')}")
+            author_label.setFont(QFont("Segoe UI", 10))
+            author_label.setStyleSheet("color: #888888;")
+            info_layout.addWidget(author_label)
+
+            # Description
+            desc_label = QLabel(plugin_info.get('description', 'No description'))
+            desc_label.setFont(QFont("Segoe UI", 10))
+            desc_label.setStyleSheet("color: #b8b8b8;")
+            desc_label.setWordWrap(True)
+            desc_label.setMaximumHeight(55)
+            info_layout.addWidget(desc_label)
+
+            # Tags
+            tags = plugin_info.get('tags', [])
+            if tags:
+                tags_text = " ".join([f"<span style='background-color: #3e3e42; padding: 2px 6px; border-radius: 3px; font-size: 9px;'>{tag}</span>" for tag in tags[:4]])
+                tags_label = QLabel(tags_text)
+                tags_label.setStyleSheet("color: #888888;")
+                tags_label.setMaximumHeight(20)
+                info_layout.addWidget(tags_label)
+
+            info_layout.addStretch()
+            item_layout.addLayout(info_layout, 1)
+
+            # Install/Update button
+            plugin_id = plugin_info['id']
+            installed_version = installed.get(plugin_id)
+
+            btn = QPushButton()
+            btn.setFont(QFont("Segoe UI", 10, QFont.Bold))
+            btn.setFixedSize(110, 40)
+
+            if installed_version:
+                if installed_version != plugin_info['version']:
+                    btn.setText("⬆️ Update")
+                    btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #16825d;
+                            color: white;
+                            border: none;
+                            border-radius: 6px;
+                            padding: 8px 16px;
+                        }
+                        QPushButton:hover {
+                            background-color: #1a9c70;
+                        }
+                    """)
+                else:
+                    btn.setText("✓ Installed")
+                    btn.setEnabled(False)
+                    btn.setStyleSheet("""
+                        QPushButton {
+                            background-color: #2d2d30;
+                            color: #888888;
+                            border: 1px solid #3e3e42;
+                            border-radius: 6px;
+                            padding: 8px 16px;
+                        }
+                    """)
+            else:
+                btn.setText("⬇️ Install")
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #0e639c;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                    }
+                    QPushButton:hover {
+                        background-color: #1177bb;
+                    }
+                """)
+
+            btn.clicked.connect(lambda checked, p=plugin_info: self.install_plugin(p))
+            item_layout.addWidget(btn)
+
+            # Set item size and widget
+            item.setSizeHint(QSize(0, 130))
+            self.plugin_store_list.addItem(item)
+            self.plugin_store_list.setItemWidget(item, item_widget)
+
+        if self.plugin_store_list.count() == 0:
+            self.store_status_label.setText("No plugins match your search")
+            self.store_status_label.setStyleSheet("color: #888888; padding: 10px;")
+        else:
+            self.store_status_label.setText(f"✓ Showing {self.plugin_store_list.count()} plugin(s)")
+            self.store_status_label.setStyleSheet("color: #00ff00; padding: 10px;")
     
     def create_plugin_store_tab(self):
         """Create the plugin store tab with Store and Installed sub-tabs"""
@@ -835,12 +980,13 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(20)
         
-        # Header
+        # Header with refresh + search
         header_frame = QFrame()
         header_frame.setObjectName("heroCard")
-        header_frame.setMaximumHeight(150)
+        header_frame.setMaximumHeight(190)
         header_layout = QVBoxLayout(header_frame)
         header_layout.setContentsMargins(16, 16, 16, 16)
+        header_layout.setSpacing(10)
         
         title = QLabel("Browse Available Plugins")
         title.setFont(QFont("Segoe UI", 18, QFont.Bold))
@@ -852,7 +998,10 @@ class MainWindow(QMainWindow):
         subtitle.setStyleSheet("color: #b8b8b8;")
         header_layout.addWidget(subtitle)
         
-        # Refresh button
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(10)
+        actions_row.setAlignment(Qt.AlignLeft)
+
         refresh_btn = QPushButton("🔄 Refresh")
         refresh_btn.setFont(QFont("Segoe UI", 10))
         refresh_btn.setMinimumHeight(36)
@@ -869,7 +1018,29 @@ class MainWindow(QMainWindow):
             }
         """)
         refresh_btn.clicked.connect(self.load_plugin_store)
-        header_layout.addWidget(refresh_btn)
+        actions_row.addWidget(refresh_btn)
+
+        self.store_search = QLineEdit()
+        self.store_search.setPlaceholderText("Search plugins by name, author, tag, or description")
+        self.store_search.setMinimumHeight(36)
+        self.store_search.setClearButtonEnabled(True)
+        self.store_search.textChanged.connect(self.apply_store_filter)
+        self.store_search.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                border: 1px solid #3e3e42;
+                border-radius: 8px;
+                padding: 6px 10px;
+                color: #d4d4d4;
+            }
+            QLineEdit:focus {
+                border-color: #0e639c;
+            }
+        """)
+        actions_row.addWidget(self.store_search, 1)
+
+        actions_row.addStretch()
+        header_layout.addLayout(actions_row)
         
         layout.addWidget(header_frame)
         
@@ -1069,12 +1240,15 @@ class MainWindow(QMainWindow):
                 
                 # Try to load plugin info
                 try:
+                    module_name = f"plugins.installed.{plugin_id}"
+                    search_locations = [str(entry_file.parent)] if entry_file.parent else None
                     spec = importlib.util.spec_from_file_location(
-                        f"temp_{plugin_id}",
+                        module_name,
                         str(entry_file),
-                        submodule_search_locations=[str(entry_file.parent)]
+                        submodule_search_locations=search_locations
                     )
                     module = importlib.util.module_from_spec(spec)
+                    sys.modules[module_name] = module
                     spec.loader.exec_module(module)
                     
                     if hasattr(module, 'Plugin'):
@@ -1232,6 +1406,8 @@ class MainWindow(QMainWindow):
         self.store_status_label.setText("Loading plugins...")
         self.store_status_label.setStyleSheet("color: #ffa500; padding: 10px;")
         self.plugin_store_list.clear()
+
+        # Clear any previous filter results but keep the text; filtering happens after fetch
         
         try:
             # Fetch index from GitHub
@@ -1240,128 +1416,15 @@ class MainWindow(QMainWindow):
                 data = json.loads(response.read().decode())
             
             plugins = data.get("plugins", [])
-            
+
             if not plugins:
                 self.store_status_label.setText("No plugins available")
                 self.store_status_label.setStyleSheet("color: #888888; padding: 10px;")
                 return
-            
-            # Get installed plugins
-            installed = self.get_installed_plugins()
-            
-            for plugin_info in plugins:
-                # Create list item
-                item = QListWidgetItem()
-                
-                # Create widget for the item
-                item_widget = QWidget()
-                item_widget.setStyleSheet("background: transparent;")
-                item_widget.setMinimumHeight(130)
-                item_layout = QHBoxLayout(item_widget)
-                item_layout.setContentsMargins(12, 12, 12, 12)
-                item_layout.setSpacing(16)
-                
-                # Icon
-                icon_label = QLabel(plugin_info.get("icon", "📦"))
-                icon_label.setFont(QFont("Segoe UI", 28))
-                icon_label.setFixedSize(50, 50)
-                icon_label.setAlignment(Qt.AlignCenter)
-                item_layout.addWidget(icon_label)
-                
-                # Info section
-                info_layout = QVBoxLayout()
-                info_layout.setSpacing(6)
-                
-                # Name and version
-                name_label = QLabel(f"<b>{plugin_info['name']}</b> <span style='color: #888;'>v{plugin_info['version']}</span>")
-                name_label.setFont(QFont("Segoe UI", 14))
-                name_label.setStyleSheet("color: #e6e6e6;")
-                info_layout.addWidget(name_label)
-                
-                # Author
-                author_label = QLabel(f"by {plugin_info.get('author', 'Unknown')}")
-                author_label.setFont(QFont("Segoe UI", 10))
-                author_label.setStyleSheet("color: #888888;")
-                info_layout.addWidget(author_label)
-                
-                # Description
-                desc_label = QLabel(plugin_info.get('description', 'No description'))
-                desc_label.setFont(QFont("Segoe UI", 10))
-                desc_label.setStyleSheet("color: #b8b8b8;")
-                desc_label.setWordWrap(True)
-                desc_label.setMaximumHeight(55)
-                info_layout.addWidget(desc_label)
-                
-                # Tags
-                tags = plugin_info.get('tags', [])
-                if tags:
-                    tags_text = " ".join([f"<span style='background-color: #3e3e42; padding: 2px 6px; border-radius: 3px; font-size: 9px;'>{tag}</span>" for tag in tags[:4]])
-                    tags_label = QLabel(tags_text)
-                    tags_label.setStyleSheet("color: #888888;")
-                    tags_label.setMaximumHeight(20)
-                    info_layout.addWidget(tags_label)
-                
-                info_layout.addStretch()
-                item_layout.addLayout(info_layout, 1)
-                
-                # Install/Update button
-                plugin_id = plugin_info['id']
-                installed_version = installed.get(plugin_id)
-                
-                btn = QPushButton()
-                btn.setFont(QFont("Segoe UI", 10, QFont.Bold))
-                btn.setFixedSize(110, 40)
-                
-                if installed_version:
-                    if installed_version != plugin_info['version']:
-                        btn.setText("⬆️ Update")
-                        btn.setStyleSheet("""
-                            QPushButton {
-                                background-color: #16825d;
-                                color: white;
-                                border: none;
-                                border-radius: 6px;
-                                padding: 8px 16px;
-                            }
-                            QPushButton:hover {
-                                background-color: #1a9c70;
-                            }
-                        """)
-                    else:
-                        btn.setText("✓ Installed")
-                        btn.setEnabled(False)
-                        btn.setStyleSheet("""
-                            QPushButton {
-                                background-color: #2d2d30;
-                                color: #888888;
-                                border: 1px solid #3e3e42;
-                                border-radius: 6px;
-                                padding: 8px 16px;
-                            }
-                        """)
-                else:
-                    btn.setText("⬇️ Install")
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            background-color: #0e639c;
-                            color: white;
-                            border: none;
-                            border-radius: 6px;
-                            padding: 8px 16px;
-                        }
-                        QPushButton:hover {
-                            background-color: #1177bb;
-                        }
-                    """)
-                
-                btn.clicked.connect(lambda checked, p=plugin_info: self.install_plugin(p))
-                item_layout.addWidget(btn)
-                
-                # Set item size and widget
-                item.setSizeHint(QSize(0, 130))
-                self.plugin_store_list.addItem(item)
-                self.plugin_store_list.setItemWidget(item, item_widget)
-            
+
+            # cache and render with current filter
+            self.store_plugins_data = plugins
+            self.apply_store_filter()
             self.store_status_label.setText(f"✓ Loaded {len(plugins)} plugin(s)")
             self.store_status_label.setStyleSheet("color: #00ff00; padding: 10px;")
             
@@ -1379,30 +1442,49 @@ class MainWindow(QMainWindow):
             return installed
         
         for plugin_path in plugins_dir.iterdir():
-            if not plugin_path.is_dir() or plugin_path.name.startswith("__"):
+            if plugin_path.name.startswith("__"):
+                continue
+
+            # Determine entry file and plugin id
+            entry_file = None
+            plugin_id = plugin_path.stem if plugin_path.is_file() else plugin_path.name
+
+            if plugin_path.is_dir():
+                init_file = plugin_path / "__init__.py"
+                if init_file.exists():
+                    entry_file = init_file
+                else:
+                    py_files = sorted(p for p in plugin_path.glob("*.py") if not p.name.startswith("__"))
+                    if py_files:
+                        entry_file = py_files[0]
+            elif plugin_path.is_file() and plugin_path.suffix == ".py":
+                entry_file = plugin_path
+
+            if entry_file is None:
                 continue
             
             # Try to load plugin to get version
             try:
-                init_file = plugin_path / "__init__.py"
-                if init_file.exists():
-                    spec = importlib.util.spec_from_file_location(
-                        f"temp_{plugin_path.name}",
-                        str(init_file),
-                        submodule_search_locations=[str(plugin_path)]
-                    )
-                    module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
-                    
-                    if hasattr(module, 'Plugin'):
-                        plugin_instance = module.Plugin(None, {})
-                        if hasattr(plugin_instance, 'get_version'):
-                            installed[plugin_path.name] = plugin_instance.get_version()
-                        else:
-                            installed[plugin_path.name] = "1.0.0"
-            except:
+                module_name = f"plugins.installed_meta.{plugin_id}"
+                search_locations = [str(entry_file.parent)] if entry_file.parent else None
+                spec = importlib.util.spec_from_file_location(
+                    module_name,
+                    str(entry_file),
+                    submodule_search_locations=search_locations
+                )
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+                
+                if hasattr(module, 'Plugin'):
+                    plugin_instance = module.Plugin(None, {})
+                    if hasattr(plugin_instance, 'get_version'):
+                        installed[plugin_id] = plugin_instance.get_version()
+                    else:
+                        installed[plugin_id] = "1.0.0"
+            except Exception:
                 # If can't load, just mark as installed with unknown version
-                installed[plugin_path.name] = "unknown"
+                installed[plugin_id] = "unknown"
         
         return installed
     
