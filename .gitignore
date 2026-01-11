@@ -39,3 +39,4 @@ htmlcov/
 .pytest_cache/
 
 TestDist/
+release/
