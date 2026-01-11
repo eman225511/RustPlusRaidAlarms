@@ -43,6 +43,15 @@ class Plugin(PluginBase):
     def get_description(self) -> str:
         """Return plugin description"""
         return "Automatically launch Rust and connect to your server on raid alerts"
+
+    def get_version(self) -> str:
+        return "1.0.0"
+
+    def get_author(self) -> str:
+        return "RustPlusRaidAlarms Team"
+
+    def get_homepage(self) -> str:
+        return "https://github.com/eman225511/RustPlusRaidAlarms"
     
     def _build_ui(self):
         """Build the UI"""

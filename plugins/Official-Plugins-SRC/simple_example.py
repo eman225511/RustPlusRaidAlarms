@@ -41,6 +41,15 @@ class Plugin(PluginBase):
     def get_description(self):
         """Return plugin description (optional, for tooltips/about)."""
         return "Minimal single-file plugin example"
+
+    def get_version(self):
+        return "1.0.0"
+
+    def get_author(self):
+        return "RustPlusRaidAlarms Team"
+
+    def get_homepage(self):
+        return "https://github.com/eman225511/RustPlusRaidAlarms"
     
     def get_widget(self):
         """Create and return the plugin's UI widget."""

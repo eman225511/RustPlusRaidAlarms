@@ -35,6 +35,15 @@ class Plugin(PluginBase):
     def get_description(self) -> str:
         return "Reference plugin showing UI + hooks"
 
+    def get_version(self) -> str:
+        return "1.0.0"
+
+    def get_author(self) -> str:
+        return "RustPlusRaidAlarms Team"
+
+    def get_homepage(self) -> str:
+        return "https://github.com/eman225511/RustPlusRaidAlarms"
+
     # UI ----------------------------------------------------------------
     def get_widget(self) -> QWidget:
         if self.widget is None:

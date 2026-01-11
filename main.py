@@ -1046,19 +1046,33 @@ class MainWindow(QMainWindow):
             installed_plugins = []
             
             for plugin_path in plugins_dir.iterdir():
-                if not plugin_path.is_dir() or plugin_path.name.startswith("__"):
+                if plugin_path.name.startswith("__"):
+                    continue
+
+                # Determine plugin entry file and id
+                entry_file = None
+                plugin_id = plugin_path.stem if plugin_path.is_file() else plugin_path.name
+
+                if plugin_path.is_dir():
+                    init_file = plugin_path / "__init__.py"
+                    if init_file.exists():
+                        entry_file = init_file
+                    else:
+                        py_files = [p for p in plugin_path.iterdir() if p.suffix == ".py" and not p.name.startswith("__")]
+                        if py_files:
+                            entry_file = py_files[0]
+                elif plugin_path.is_file() and plugin_path.suffix == ".py":
+                    entry_file = plugin_path
+
+                if entry_file is None:
                     continue
                 
                 # Try to load plugin info
                 try:
-                    init_file = plugin_path / "__init__.py"
-                    if not init_file.exists():
-                        continue
-                    
                     spec = importlib.util.spec_from_file_location(
-                        f"temp_{plugin_path.name}",
-                        str(init_file),
-                        submodule_search_locations=[str(plugin_path)]
+                        f"temp_{plugin_id}",
+                        str(entry_file),
+                        submodule_search_locations=[str(entry_file.parent)]
                     )
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
@@ -1067,8 +1081,8 @@ class MainWindow(QMainWindow):
                         plugin_instance = module.Plugin(None, {})
                         
                         plugin_info = {
-                            'id': plugin_path.name,
-                            'name': plugin_instance.get_name() if hasattr(plugin_instance, 'get_name') else plugin_path.name,
+                            'id': plugin_id,
+                            'name': plugin_instance.get_name() if hasattr(plugin_instance, 'get_name') else plugin_id,
                             'icon': plugin_instance.get_icon() if hasattr(plugin_instance, 'get_icon') else "📦",
                             'version': plugin_instance.get_version() if hasattr(plugin_instance, 'get_version') else "1.0.0",
                             'author': plugin_instance.get_author() if hasattr(plugin_instance, 'get_author') else "Unknown",
@@ -1079,7 +1093,7 @@ class MainWindow(QMainWindow):
                         
                         installed_plugins.append(plugin_info)
                 except Exception as e:
-                    self.log(f"Error loading plugin {plugin_path.name}: {e}")
+                    self.log(f"Error loading plugin {plugin_id}: {e}")
             
             if not installed_plugins:
                 self.installed_status_label.setText("No plugins installed")

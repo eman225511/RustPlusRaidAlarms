@@ -48,6 +48,15 @@ class Plugin(PluginBase):
     def get_description(self) -> str:
         return "Control LED lights when raid alarms are triggered"
 
+    def get_version(self) -> str:
+        return "1.0.0"
+
+    def get_author(self) -> str:
+        return "RustPlusRaidAlarms Team"
+
+    def get_homepage(self) -> str:
+        return "https://github.com/eman225511/RustPlusRaidAlarms"
+
     def setup_controller(self):
         """Initialize LED controller based on current config."""
         led_type = self.config.get("led_type", "wled")

@@ -96,6 +96,15 @@ class Plugin(PluginBase):
     
     def get_description(self):
         return "Play audio files on raid alerts through multiple devices"
+
+    def get_version(self):
+        return "1.0.0"
+
+    def get_author(self):
+        return "RustPlusRaidAlarms Team"
+
+    def get_homepage(self):
+        return "https://github.com/eman225511/RustPlusRaidAlarms"
     
     def get_widget(self):
         if self.widget is None:
