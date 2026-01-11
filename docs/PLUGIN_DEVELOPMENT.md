@@ -10,6 +10,10 @@ This app discovers plugins from the `plugins/` folder automatically. Drop in a P
   - `get_description(self) -> str`: Short description.
   - `get_widget(self) -> QWidget`: Returns your plugin's root widget (build lazily and cache it).
   - `on_telegram_message(self, message: str)`: Called for every Telegram message that passes filters.
+- Recommended metadata (used by the Plugin Store for update checks):
+    - `get_version(self) -> str`
+    - `get_author(self) -> str`
+    - `get_homepage(self) -> str`
 
 ## Auto-discovery
 - Plugins live under `plugins/`.
@@ -55,6 +59,17 @@ See `plugins/simple_example.py` for a minimal single-file example including:
 - Reacting to Telegram messages
 
 **Note**: Example plugins are hidden by default. Enable "Show Example Plugins (For Devs)" in the navigation sidebar to view them.
+
+## Publishing to the Plugin Store
+
+1. **Add metadata methods**: implement `get_version`, `get_author`, and `get_homepage` so the store can display and compare versions.
+2. **Package your plugin**:
+    - Single-file: zip the `.py` (e.g., `zip my_plugin.zip my_plugin.py`).
+    - Package: zip the folder contents (keep `__init__.py` at the root of the zip).
+3. **Host the zip** on a public URL (GitHub Release asset, raw GitHub link, etc.).
+4. **Add to `plugins/index.json`** with: `id`, `name`, `icon`, `version`, `author`, `description`, `homepage`, `download_url`, `min_app_version`, `category`, `tags`, `requires`, `size_kb`.
+5. **Open a PR** to this repo updating `plugins/index.json` (and a short README for your plugin if desired).
+6. **Versioning**: bump `get_version` and the `index.json` version together so users see the Update button.
 
 ## Minimal skeleton
 ```python

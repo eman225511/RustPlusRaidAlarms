@@ -38,7 +38,7 @@ Each plugin in `index.json` should have:
 1. **Create your plugin** following the PluginBase interface:
    - Inherit from `PluginBase`
    - Implement required methods: `get_name()`, `get_icon()`, `get_widget()`, `on_telegram_message()`
-   - Optional metadata: `get_version()`, `get_author()`, `get_description()`, `get_homepage()`
+    - Optional but recommended: `get_version()`, `get_author()`, `get_description()`, `get_homepage()`
 
 2. **Package as zip**:
    ```bash
@@ -50,6 +50,13 @@ Each plugin in `index.json` should have:
 4. **Add entry to index.json** with your plugin metadata
 
 5. **Submit a pull request** to this repository
+
+## Submission checklist
+- [ ] Add `get_version`, `get_author`, `get_homepage` so the store can show metadata and updates
+- [ ] Zip the plugin with the correct root (`__init__.py` for packages, or single `.py` file)
+- [ ] Host the zip at a public URL
+- [ ] Add a complete entry to `plugins/index.json` (id/name/version/icon/author/description/homepage/download_url/tags/category/min_app_version/requires/size_kb)
+- [ ] Open a PR to this repo
 
 ### Plugin Structure
 

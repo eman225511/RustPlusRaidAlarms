@@ -43,6 +43,7 @@
 <details open>
 <summary><b>🔌 Plugin Architecture</b></summary>
 
+- 🛒 Built-in Plugin Store with search + one-click install/update/uninstall
 - 🔍 Auto-discovered from `plugins/` folder every 5 seconds
 - 🔥 Hot-reload: add/remove plugins without restarting
 - 📄 Supports both single-file (`plugin.py`) and package (`plugin/__init__.py`) formats
@@ -134,6 +135,12 @@ python main.py
 
 > **Plugins are automatically loaded** from the `plugins/` directory and appear in the left sidebar. No core code changes needed—just drop in your plugin and it's ready!
 
+### 🛒 Plugin Store (recommended)
+- Open **Plugins → Store** in the app
+- Use the search bar to filter by name/author/tag
+- Click **Install** or **Update**; uninstall from the **Installed** tab
+- Plugins live in your local `plugins/` folder (not committed to git)
+
 ### 💡 Built-in Plugins
 
 | Plugin | Description | Guide |
@@ -159,6 +166,12 @@ See the **[Plugin Development Guide](docs/PLUGIN_DEVELOPMENT.md)** for:
 - 📨 Telegram message hooks
 - 🎨 Styling guidelines
 - 💻 Complete skeleton code
+
+### Submit your plugin to the store
+1) Build your plugin (single-file or package) and include metadata methods (`get_version`, `get_author`, `get_homepage`).
+2) Zip the plugin folder/file and host it (GitHub release or raw link).
+3) Add an entry to `plugins/index.json` with your metadata and download URL, then open a PR.
+4) Keep version numbers updated for smooth **Update** prompts.
 
 ### Example Plugins
 - `plugins/example_plugin/` — Package-based plugin with advanced features
