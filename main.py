@@ -1761,15 +1761,22 @@ class MainWindow(QMainWindow):
             if path.name.startswith('_'):
                 continue
 
-            # Package plugin
+            # Package or folder plugin
             if path.is_dir():
                 plugin_file = path / "__init__.py"
                 if plugin_file.exists():
+                    # Standard package
                     self.load_plugin(plugin_file, module_name=f"plugins.{path.name}")
                 else:
-                    self.log(f"⚠ Plugin {path.name} missing __init__.py")
+                    # Try first .py file in the folder as a single-file plugin
+                    py_files = sorted(p for p in path.glob("*.py") if not p.name.startswith("__"))
+                    if py_files:
+                        first_py = py_files[0]
+                        self.load_plugin(first_py, module_name=f"plugins.{path.name}.{first_py.stem}")
+                    else:
+                        self.log(f"⚠ Plugin {path.name} missing __init__.py and no .py files found")
 
-            # Single-file plugin
+            # Single-file plugin at root
             elif path.is_file() and path.suffix == ".py":
                 self.load_plugin(path, module_name=f"plugins.{path.stem}")
 
