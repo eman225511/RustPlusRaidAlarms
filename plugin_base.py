@@ -75,6 +75,33 @@ class PluginBase(ABC):
         """
         return "No description provided"
     
+    def get_version(self) -> str:
+        """
+        Optional: Return the plugin version
+        
+        Returns:
+            str: Version string (e.g., "1.0.0")
+        """
+        return "1.0.0"
+    
+    def get_author(self) -> str:
+        """
+        Optional: Return the plugin author
+        
+        Returns:
+            str: Author name
+        """
+        return "Unknown"
+    
+    def get_homepage(self) -> str:
+        """
+        Optional: Return the plugin homepage/repo URL
+        
+        Returns:
+            str: URL or empty string
+        """
+        return ""
+    
     def on_enable(self):
         """Optional: Called when the plugin is enabled"""
         pass
