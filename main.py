@@ -7,6 +7,7 @@ import sys
 import json
 import importlib.util
 import urllib.request
+import subprocess
 import zipfile
 import tempfile
 import shutil
@@ -1542,13 +1543,18 @@ class MainWindow(QMainWindow):
             # Clean up temp file
             Path(temp_path).unlink()
             
+            # Check and optionally install dependencies
+            deps_ok = self.ensure_plugin_dependencies(plugin_info, plugin_path)
+
             self.log(f"✓ Installed {plugin_name} v{plugin_info['version']}")
             
             # Reload plugins
             QMessageBox.information(
                 self,
                 "Plugin Installed",
-                f"{plugin_name} has been installed!\n\nRestart the application to load the plugin."
+                f"{plugin_name} has been installed!\n\n"
+                + ("Dependencies installed. " if deps_ok else "Some dependencies may be missing. ")
+                + "Restart the application to load the plugin."
             )
             
             # Refresh both store and installed lists
@@ -1562,6 +1568,95 @@ class MainWindow(QMainWindow):
                 "Installation Failed",
                 f"Failed to install {plugin_name}:\n\n{str(e)}"
             )
+
+    def ensure_plugin_dependencies(self, plugin_info, plugin_path):
+        """Ensure required Python packages are installed for a plugin.
+
+        Returns True if all dependencies are satisfied or installed, False otherwise.
+        """
+        requires = set()
+
+        # From index.json metadata
+        for req in plugin_info.get('requires', []) or []:
+            req = req.strip()
+            if req:
+                requires.add(req)
+
+        # From plugin-local requirements.txt
+        req_file = plugin_path / "requirements.txt"
+        if req_file.exists():
+            try:
+                for line in req_file.read_text().splitlines():
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        requires.add(line)
+            except Exception as e:
+                self.log(f"⚠ Unable to read requirements.txt for {plugin_info.get('name', '')}: {e}")
+
+        if not requires:
+            return True
+
+        def canonical_mod(req):
+            mod = req.split('==')[0].split('>=')[0].split('<=')[0].split('[')[0].split(';')[0]
+            return mod.strip().replace('-', '_')
+
+        missing = []
+        for req in sorted(requires):
+            mod_name = canonical_mod(req)
+            try:
+                if importlib.util.find_spec(mod_name) is None:
+                    missing.append(req)
+            except Exception:
+                missing.append(req)
+
+        if not missing:
+            return True
+
+        req_list = "\n".join(f"- {r}" for r in missing)
+        install_now = QMessageBox.question(
+            self,
+            "Install Plugin Dependencies",
+            f"{plugin_info.get('name', 'This plugin')} requires packages:\n\n{req_list}\n\nInstall them now?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if install_now == QMessageBox.Yes:
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", *missing])
+                self.log(f"✓ Installed dependencies for {plugin_info.get('name', '')}: {', '.join(missing)}")
+                # Offer to append to root requirements.txt for future installs
+                add_reqs = QMessageBox.question(
+                    self,
+                    "Persist Dependencies",
+                    "Add these packages to requirements.txt for next launch?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if add_reqs == QMessageBox.Yes:
+                    reqs_path = Path("requirements.txt")
+                    existing = set()
+                    if reqs_path.exists():
+                        try:
+                            existing = {line.strip() for line in reqs_path.read_text().splitlines() if line.strip() and not line.startswith('#')}
+                        except Exception:
+                            existing = set()
+                    to_append = [req for req in missing if req not in existing]
+                    if to_append:
+                        with reqs_path.open("a", encoding="utf-8") as f:
+                            for req in to_append:
+                                f.write(f"\n{req}")
+                    self.log("✓ requirements.txt updated for plugin dependencies")
+                return True
+            except Exception as e:
+                self.log(f"❌ Failed to install dependencies for {plugin_info.get('name', '')}: {e}")
+                QMessageBox.critical(
+                    self,
+                    "Dependency Install Failed",
+                    f"Failed to install dependencies:\n\n{str(e)}"
+                )
+                return False
+
+        # User chose not to install now
+        return False
     
     def create_vertical_tab_bar(self):
         """Create vertical tab bar on the right"""
