@@ -170,7 +170,7 @@ See the **[Plugin Development Guide](docs/PLUGIN_DEVELOPMENT.md)** for:
 ### Submit your plugin to the store
 1) Build your plugin (single-file or package) and include metadata methods (`get_version`, `get_author`, `get_homepage`).
 2) Zip the plugin folder/file and host it (GitHub release or raw link).
-3) Add an entry to `plugins/index.json` with your metadata and download URL, then open a PR.
+3) Add an entry to `index.json` in the [RustPlusRaidAlarmPlugins](https://github.com/eman225511/RustPlusRaidAlarmPlugins) repo with your metadata and download URL, then open a PR.
 4) Keep version numbers updated for smooth **Update** prompts.
 
 ### Example Plugins

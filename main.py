@@ -1412,7 +1412,7 @@ class MainWindow(QMainWindow):
         
         try:
             # Fetch index from GitHub
-            index_url = "https://raw.githubusercontent.com/eman225511/RustPlusRaidAlarms/main/plugins/index.json"
+            index_url = "https://raw.githubusercontent.com/eman225511/RustPlusRaidAlarmPlugins/refs/heads/main/index.json"
             with urllib.request.urlopen(index_url, timeout=10) as response:
                 data = json.loads(response.read().decode())
             
