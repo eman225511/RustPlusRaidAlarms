@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import requests
+import multiprocessing
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 from flask import Flask, request
@@ -21,7 +22,7 @@ FCMListener = None
 RustSocket = None
 ServerDetails = None
 
-def fcm_listener_worker(fcm_credentials):
+def fcm_listener_worker(fcm_credentials, notification_queue=None):
     """Module-level worker used as a multiprocessing target.
     Runs the rustplus FCMListener and keeps the process alive.
     """
@@ -33,12 +34,41 @@ def fcm_listener_worker(fcm_credentials):
         import time
 
         def on_notification(obj, notification, data_message):
+            # Send notification to main service via queue
+            if notification_queue:
+                try:
+                    notification_queue.put((obj, notification, data_message))
+                except Exception as e:
+                    dbg(f"Failed to send notification to queue: {e}")
+            
             # Summarize notification for logs
             try:
                 nid = None
-                if hasattr(data_message, 'data') and isinstance(data_message.data, dict):
-                    nid = data_message.data.get('persistent_id') or data_message.data.get('id')
-                dbg(f"Notification received nid={nid}")
+                data = None
+                if hasattr(data_message, 'data'):
+                    data = data_message.data
+                    if isinstance(data, dict):
+                        nid = data.get('persistent_id') or data.get('id')
+
+                # Fallback: try extracting from notification dict
+                if nid is None and isinstance(notification, dict):
+                    nid = notification.get('persistent_id') or notification.get('id')
+                    if nid is None and 'body' in notification:
+                        try:
+                            body_json = json.loads(notification['body'])
+                            nid = body_json.get('id') or body_json.get('persistent_id')
+                        except Exception:
+                            pass
+
+                # Log notification
+                if nid is None:
+                    try:
+                        dbg(f"Notification received body_id=None; notification={notification}; data={json.dumps(data, default=str)}")
+                    except Exception:
+                        dbg(f"Notification received body_id=None; notification={notification}; data_repr={repr(data)}")
+                else:
+                    dbg(f"Notification received body_id={nid}")
+
             except Exception as _:
                 dbg("Notification received (unable to summarize)")
 
@@ -78,6 +108,7 @@ class FCMService(QThread):
         self.running = False
         self.fcm_listener = None
         self.fcm_listener_process = None
+        self.notification_queue = multiprocessing.Queue()
         self.auth_done = threading.Event()
         self.rustplus_token = None
         self.steam_id = None
@@ -96,8 +127,6 @@ class FCMService(QThread):
         self.load_seen_notifications()
         self.load_pairing()
 
-    # run_fcm_listener_subprocess removed — use module-level fcm_listener_worker
-    
     def load_credentials(self):
         """Load existing auth token, FCM credentials, and filter keyword"""
         try:
@@ -312,7 +341,7 @@ class FCMService(QThread):
                 print("[FCM] Starting FCM listener (subprocess)...")
                 self.fcm_listener_process = multiprocessing.Process(
                     target=fcm_listener_worker,
-                    args=(self.fcm_credentials,)
+                    args=(self.fcm_credentials, self.notification_queue)
                 )
                 self.fcm_listener_process.start()
                 self.status_changed.emit("✓ FCM listener active", "#00ff00")
@@ -382,7 +411,7 @@ class FCMService(QThread):
             
             print("[FCM] Node/npx not found; FCM setup failed.")
             return False
-    
+
     def _register_device_for_push(self):
         """Register device for push notifications"""
         try:
@@ -433,7 +462,7 @@ class FCMService(QThread):
         except Exception as e:
             print(f"[FCM] Error registering device: {e}")
             return False
-    
+
     def run(self):
         """Main thread loop for FCM listening"""
         if self.running:
@@ -468,7 +497,7 @@ class FCMService(QThread):
             if self.fcm_credentials:
                 self.fcm_listener_process = multiprocessing.Process(
                     target=fcm_listener_worker,
-                    args=(self.fcm_credentials,)
+                    args=(self.fcm_credentials, self.notification_queue)
                 )
                 self.fcm_listener_process.start()
                 dbg(f"FCM listener subprocess started (pid={self.fcm_listener_process.pid})")
@@ -482,9 +511,19 @@ class FCMService(QThread):
             self.status_changed.emit("✓ FCM listener active", "#00ff00")
             dbg("FCM listener started and waiting for notifications...")
             
-            # Keep thread alive
+            # Listen for notifications from the worker process
             while self.running:
-                time.sleep(1)
+                try:
+                    # Check for notifications from worker (non-blocking)
+                    if not self.notification_queue.empty():
+                        obj, notification, data_message = self.notification_queue.get_nowait()
+                        # Process notification in main service
+                        self._on_notification(obj, notification, data_message)
+                    else:
+                        time.sleep(0.1)  # Short sleep to avoid busy waiting
+                except Exception as e:
+                    dbg(f"Error processing notification queue: {e}")
+                    time.sleep(1)
             
         except Exception as e:
             error_msg = str(e)
@@ -500,7 +539,7 @@ class FCMService(QThread):
                 self.running_changed.emit(False)
             except Exception:
                 pass
-    
+
     def _on_notification(self, obj, notification, data_message):
         """Handle incoming FCM notification"""
         try:
@@ -515,15 +554,10 @@ class FCMService(QThread):
                 data = data_message.data if isinstance(data_message.data, dict) else {}
             elif hasattr(data_message, '__dict__'):
                 data = {k: v for k, v in data_message.__dict__.items() if not k.startswith('_')}
-            
-            # Check for duplicate notifications
+
+            # Get notification ID to check if we've already seen this (TestAuthFlow logic)
+            # Use persistent_id which is stable across deliveries
             notif_id = data.get("persistent_id") or data.get("id")
-            if notif_id in self.seen_notifications:
-                dbg(f"Ignoring already-seen notification: {notif_id}")
-                return
-            
-            if notif_id:
-                self.save_seen_notification(notif_id)
             
             # Parse notification data
             app_data_list = data.get("app_data", [])
@@ -531,12 +565,13 @@ class FCMService(QThread):
             title = None
             message = None
             body_data = {}
-            
+
             for app_data in app_data_list:
                 if hasattr(app_data, 'key') and hasattr(app_data, 'value'):
                     key = app_data.key
                     value = app_data.value
-                    
+
+                    # Extract common fields
                     if key == 'title' or key == 'gcm.notification.title':
                         title = value
                     elif key == 'message' or key == 'gcm.notification.body':
@@ -549,7 +584,59 @@ class FCMService(QThread):
                         except (json.JSONDecodeError, AttributeError):
                             body_data = {'raw': value}
             
-            # Extract server info from notification
+            # Display parsed notification (TestAuthFlow style)
+            print(f"[FCM] Category: {data.get('category', 'N/A')}")
+            print(f"[FCM] From: {data.get('from_', 'N/A')}")
+            
+            print("[FCM] --- Notification Details ---")
+            if notification_type:
+                print(f"[FCM] Type: {notification_type}")
+            if title:
+                print(f"[FCM] Title: {title}")
+            if message:
+                print(f"[FCM] Message: {message}")
+            
+            if body_data:
+                print("[FCM] Body Data:")
+                for key, value in body_data.items():
+                    if isinstance(value, str) and len(value) > 100:
+                        print(f"[FCM]   {key}: {value[:100]}...")
+                    else:
+                        print(f"[FCM]   {key}: {value}")
+            
+            print("[FCM] ----------------------------")
+            
+            # Check for duplicates and save notification ID (TestAuthFlow logic)
+            if notif_id in self.seen_notifications:
+                print(f"[FCM] Ignoring already-seen notification: {notif_id}")
+                return
+
+            if notif_id:
+                self.save_seen_notification(notif_id)
+                print(f"[FCM] Notification ID: {notif_id} (saved)")
+            
+            # Handle server pairing notifications
+            if notification_type == 'pairing' and body_data.get('type') == 'server':
+                player_id = body_data.get("playerId")
+                player_token = body_data.get("playerToken")
+                
+                if body_data.get('id') and body_data.get('ip') and body_data.get('port'):
+                    print(f"[FCM] Server pairing detected: {body_data.get('name')}")
+                    self.save_pairing(
+                        body_data.get('id'),
+                        body_data.get('name'),
+                        body_data.get('ip'),
+                        body_data.get('port'),
+                        player_id,
+                        player_token
+                    )
+                    self.status_changed.emit(
+                        f"✓ Paired with {body_data.get('name')}",
+                        "#00ff00"
+                    )
+                    return  # Don't process pairing notifications as regular notifications
+            
+            # Check if notification is from paired server (ID and IP/name fallback)
             notif_server_id = body_data.get('id') or body_data.get('server_id')
             notif_server_name = body_data.get('name') or body_data.get('server_name', 'Unknown')
             notif_server_ip = body_data.get('ip')
@@ -564,28 +651,6 @@ class FCMService(QThread):
             if notif_server_name and notif_server_ip:
                 print(f"[FCM] Server: {notif_server_name} ({notif_server_ip}:{notif_server_port})")
             
-            # Handle pairing notifications
-            if notification_type == 'pairing' and body_data.get('type') == 'server':
-                player_id = body_data.get("playerId")
-                player_token = body_data.get("playerToken")
-                
-                if notif_server_id and notif_server_ip and notif_server_port:
-                    print(f"[FCM] Server pairing detected: {notif_server_name}")
-                    self.save_pairing(
-                        notif_server_id,
-                        notif_server_name,
-                        notif_server_ip,
-                        notif_server_port,
-                        player_id,
-                        player_token
-                    )
-                    self.status_changed.emit(
-                        f"✓ Paired with {notif_server_name}",
-                        "#00ff00"
-                    )
-                    return  # Don't process pairing notifications as regular notifications
-            
-            # Check if notification is from paired server (ID and IP/name fallback)
             if self.is_paired():
                 id_mismatch = False
                 ip_mismatch = False
