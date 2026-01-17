@@ -26,7 +26,7 @@ def check_python():
     """Check if Python is available, return path to python executable"""
     script_dir = Path(__file__).parent
     
-    print_step(1, 5, "Checking for Python installation...")
+    print_step(1, 6, "Checking for Python installation...")
     
     # Check if python command works
     try:
@@ -112,7 +112,7 @@ def download_portable_python(script_dir):
 
 def setup_venv(python_cmd, script_dir):
     """Setup virtual environment"""
-    print_step(2, 5, "Checking for virtual environment...")
+    print_step(2, 6, "Checking for virtual environment...")
     
     venv_python = script_dir / ".venv" / "Scripts" / "python.exe"
     
@@ -142,7 +142,7 @@ def setup_venv(python_cmd, script_dir):
 
 def install_dependencies(venv_python, script_dir):
     """Install dependencies from requirements.txt"""
-    print_step(3, 5, "Installing dependencies...")
+    print_step(3, 6, "Installing dependencies...")
     
     # Upgrade pip first
     print("Upgrading pip...")
@@ -189,7 +189,7 @@ def install_dependencies(venv_python, script_dir):
 
 def check_config(script_dir):
     """Check for config file"""
-    print_step(4, 5, "Checking configuration...")
+    print_step(5, 6, "Checking configuration...")
     
     config_file = script_dir / "config.json"
     if config_file.exists():
@@ -199,7 +199,7 @@ def check_config(script_dir):
 
 def run_application(venv_python, script_dir):
     """Run the main application"""
-    print_step(5, 5, "Starting RustPlus Raid Alarms...")
+    print_step(6, 6, "Starting RustPlus Raid Alarms...")
     print()
     print("=" * 50)
     print()
@@ -228,6 +228,65 @@ def run_application(venv_python, script_dir):
         input("\nPress Enter to exit...")
         sys.exit(1)
 
+def check_node_npm(script_dir):
+    """Check for Node.js and npm for FCM Beta; offer install if missing"""
+    print_step(4, 6, "Checking Node.js/npm for Beta features...")
+    import shutil
+    node = shutil.which("node")
+    npm = shutil.which("npm")
+    if node and npm:
+        print(f"[OK] Node.js found: {node}")
+        print(f"[OK] npm found: {npm}")
+        return True
+    print("[!] Node.js/npm not found. FCM Beta auth requires Node.js.")
+    try:
+        choice = input("\nWould you like to install Node.js now? [Y/n]: ").strip().lower() or 'y'
+    except Exception:
+        choice = 'n'
+    if choice != 'y':
+        print("Skipping Node.js install. You can install later from https://nodejs.org/")
+        return False
+
+    # Try winget first
+    winget = shutil.which("winget")
+    if winget:
+        print("[*] Installing Node.js via winget (LTS)...")
+        try:
+            result = subprocess.run([winget, "install", "OpenJS.NodeJS.LTS", "-e", "--silent"], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("[OK] Node.js installed via winget")
+                return True
+            else:
+                print("[!] Winget install failed, falling back to MSI")
+        except Exception as e:
+            print(f"[!] Winget error: {e}")
+
+    # Fallback: download MSI installer
+    try:
+        temp_dir = script_dir / "temp"
+        temp_dir.mkdir(exist_ok=True)
+        # Use a stable LTS URL (may change over time)
+        node_url = "https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi"
+        msi_path = temp_dir / "node-lts.msi"
+        print(f"[*] Downloading Node.js LTS from {node_url} ...")
+        urllib.request.urlretrieve(node_url, msi_path)
+        print("[*] Running Node.js installer (silent)...")
+        # Run MSI silently; may require admin privileges
+        result = subprocess.run(["msiexec", "/i", str(msi_path), "/qn", "/norestart"], capture_output=True)
+        if result.returncode == 0:
+            print("[OK] Node.js installed")
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return True
+        else:
+            print("[!] MSI installation failed; please install manually.")
+            print("Download: https://nodejs.org/")
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return False
+    except Exception as e:
+        print(f"[ERROR] Failed to download/install Node.js: {e}")
+        print("Please install Node.js from https://nodejs.org/ and rerun.")
+        return False
+
 def main():
     """Main launcher function"""
     # Get script directory (handle both script and frozen exe)
@@ -252,10 +311,13 @@ def main():
         # Step 3: Install dependencies
         install_dependencies(venv_python, script_dir)
         
-        # Step 4: Check config
+        # Step 4: Check Node.js & npm for FCM Beta
+        check_node_npm(script_dir)
+
+        # Step 5: Check config
         check_config(script_dir)
         
-        # Step 5: Run the application
+        # Step 6: Run the application
         run_application(venv_python, script_dir)
         
     except KeyboardInterrupt:

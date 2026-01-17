@@ -27,6 +27,7 @@ from PySide6.QtGui import QFont, QColor, QPalette, QDrag, QCursor
 
 from telegram_service import TelegramService
 from relay_server import RelayServer, RelayClient
+from fcm_service import FCMService
 from plugin_base import PluginBase
 
 CONFIG_FILE = "config.json"
@@ -104,6 +105,13 @@ class MainWindow(QMainWindow):
         self.telegram_service.message_received.connect(self.on_telegram_message)
         self.telegram_service.status_changed.connect(self.on_telegram_status)
         
+        # Initialize FCM service
+        self.fcm_service = FCMService(self.config)
+        self.fcm_service.message_received.connect(self.on_fcm_notification)
+        self.fcm_service.status_changed.connect(self.on_fcm_status)
+        self.fcm_service.auth_completed.connect(self.on_fcm_auth_completed)
+        self.fcm_service.server_paired.connect(self.on_fcm_server_paired)
+        
         # Relay server/client
         self.relay_server = RelayServer(port=5555)
         self.relay_server.status_changed.connect(self.on_relay_server_status)
@@ -135,8 +143,15 @@ class MainWindow(QMainWindow):
         # Check if in relay mode and restore connection
         if self.config.get("relay_mode", False) and self.config.get("relay_client_server"):
             QTimer.singleShot(1000, self.restore_relay_connection)
+        elif self.config.get("fcm_mode", False):
+            # Auto-start FCM listener if in FCM mode and keyword set
+            if self.fcm_service.is_authenticated() and bool((self.config.get("fcm_filter_keyword", "") or "").strip()):
+                QTimer.singleShot(500, self.fcm_service.start)
+                self.log("Auto-starting FCM mode...")
+            else:
+                self.log("FCM mode enabled but keyword/auth not ready; not auto-starting")
         else:
-            # Auto-start Telegram listener if not in relay mode
+            # Auto-start Telegram listener if not in relay or FCM mode
             QTimer.singleShot(500, self.telegram_service.start)
         
         # Update connection mode UI after tabs are created
@@ -229,6 +244,10 @@ class MainWindow(QMainWindow):
         # Plugin Store Tab (always fourth)
         plugin_store_tab = self.create_plugin_store_tab()
         self.content_stack.addTab(plugin_store_tab, "")
+        
+        # Beta Features Tab (always fifth)
+        beta_tab = self.create_beta_tab()
+        self.content_stack.addTab(beta_tab, "")
         
         # Vertical tab bar (right side)
         self.tab_bar = self.create_vertical_tab_bar()
@@ -901,6 +920,288 @@ class MainWindow(QMainWindow):
         else:
             self.store_status_label.setText(f"✓ Showing {self.plugin_store_list.count()} plugin(s)")
             self.store_status_label.setStyleSheet("color: #00ff00; padding: 10px;")
+    
+    def create_beta_tab(self):
+        """Create the Beta Features tab for FCM direct notifications"""
+        from PySide6.QtWidgets import QScrollArea
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background-color: #1e1e1e;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #3e3e42;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #505053;
+            }
+        """)
+        
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
+        
+        # Hero header
+        hero = QFrame()
+        hero.setObjectName("heroCard")
+        hero_layout = QVBoxLayout(hero)
+        hero_layout.setContentsMargins(16, 16, 16, 16)
+        hero_layout.setSpacing(8)
+        
+        title = QLabel("🧪 FCM Direct Notifications (Beta)")
+        title.setFont(QFont("Segoe UI", 22, QFont.Bold))
+        title.setStyleSheet("color: #ffffff;")
+        hero_layout.addWidget(title)
+        
+        subtitle = QLabel("Connect directly to Rust+ servers via Firebase Cloud Messaging")
+        subtitle.setFont(QFont("Segoe UI", 11))
+        subtitle.setStyleSheet("color: #b8b8b8;")
+        hero_layout.addWidget(subtitle)
+        
+        layout.addWidget(hero)
+        
+        # Warning banner
+        warning_frame = QFrame()
+        warning_frame.setObjectName("card")
+        warning_frame.setStyleSheet("QFrame#card { background-color: #3d2a00; border-left: 4px solid #ffa500; }")
+        warning_layout = QVBoxLayout(warning_frame)
+        warning_layout.setContentsMargins(12, 12, 12, 12)
+        
+        warning_label = QLabel("⚠️ <b>Beta Feature</b> - This mode bypasses Telegram and connects directly to Rust+ servers. "
+                               "You can only use ONE mode at a time (Telegram, Relay, or FCM).")
+        warning_label.setStyleSheet("color: #ffa500; font-size: 10pt;")
+        warning_label.setWordWrap(True)
+        warning_layout.addWidget(warning_label)
+        
+        layout.addWidget(warning_frame)
+        
+        # Status section
+        status_frame = QFrame()
+        status_frame.setObjectName("card")
+        status_layout = QVBoxLayout(status_frame)
+        status_layout.setContentsMargins(16, 16, 16, 16)
+        status_layout.setSpacing(10)
+        
+        status_header = QLabel("📊 FCM Status")
+        status_header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        status_header.setStyleSheet("color: #e6e6e6;")
+        status_layout.addWidget(status_header)
+        
+        # Authentication status
+        auth_row = QHBoxLayout()
+        auth_label = QLabel("Authentication:")
+        auth_label.setStyleSheet("color: #d4d4d4; font-size: 10pt;")
+        auth_row.addWidget(auth_label)
+        
+        self.fcm_auth_status = QLabel("Not authenticated")
+        self.fcm_auth_status.setStyleSheet("color: #888888; font-size: 10pt;")
+        auth_row.addWidget(self.fcm_auth_status)
+        auth_row.addStretch()
+        status_layout.addLayout(auth_row)
+        
+        # Listener status
+        listener_row = QHBoxLayout()
+        listener_label = QLabel("Listener Status:")
+        listener_label.setStyleSheet("color: #d4d4d4; font-size: 10pt;")
+        listener_row.addWidget(listener_label)
+        
+        self.fcm_listener_status = QLabel("● Offline")
+        self.fcm_listener_status.setStyleSheet("color: #888888; padding: 4px 8px; background-color: #1a1a1a; border-radius: 4px; font-size: 10pt;")
+        listener_row.addWidget(self.fcm_listener_status)
+        listener_row.addStretch()
+        status_layout.addLayout(listener_row)
+
+        # Start/Stop timestamp
+        time_row = QHBoxLayout()
+        time_label = QLabel("Session:")
+        time_label.setStyleSheet("color: #d4d4d4; font-size: 10pt;")
+        time_row.addWidget(time_label)
+
+        self.fcm_session_time = QLabel("Not started")
+        self.fcm_session_time.setStyleSheet("color: #9aa0a6; font-size: 9pt;")
+        time_row.addWidget(self.fcm_session_time)
+        time_row.addStretch()
+        status_layout.addLayout(time_row)
+        
+        # Notifications count
+        notif_row = QHBoxLayout()
+        notif_label = QLabel("Notifications Received:")
+        notif_label.setStyleSheet("color: #d4d4d4; font-size: 10pt;")
+        notif_row.addWidget(notif_label)
+        
+        self.fcm_notif_count = QLabel("0")
+        self.fcm_notif_count.setStyleSheet("color: #00ff00; font-size: 10pt; font-weight: bold;")
+        notif_row.addWidget(self.fcm_notif_count)
+        notif_row.addStretch()
+        status_layout.addLayout(notif_row)
+        
+        # Paired server info
+        paired_row = QHBoxLayout()
+        paired_label = QLabel("Paired Server:")
+        paired_label.setStyleSheet("color: #d4d4d4; font-size: 10pt;")
+        paired_row.addWidget(paired_label)
+        
+        self.fcm_paired_server = QLabel("Not paired")
+        self.fcm_paired_server.setStyleSheet("color: #888888; font-size: 10pt;")
+        paired_row.addWidget(self.fcm_paired_server)
+        paired_row.addStretch()
+        status_layout.addLayout(paired_row)
+        
+        # Disconnect server button
+        self.fcm_disconnect_server_btn = QPushButton("🔌 Disconnect Server")
+        self.fcm_disconnect_server_btn.setFont(QFont("Segoe UI", 10))
+        self.fcm_disconnect_server_btn.setMinimumHeight(36)
+        self.fcm_disconnect_server_btn.setStyleSheet(self.get_button_style("#dc3545"))
+        self.fcm_disconnect_server_btn.clicked.connect(self.on_fcm_disconnect_server)
+        self.fcm_disconnect_server_btn.hide()
+        status_layout.addWidget(self.fcm_disconnect_server_btn)
+        
+        # Last notification
+        self.fcm_last_notif = QLabel("No notifications yet")
+        self.fcm_last_notif.setStyleSheet("color: #888888; font-size: 9pt; font-style: italic; padding: 8px; background-color: #1a1a1a; border-radius: 4px;")
+        self.fcm_last_notif.setWordWrap(True)
+        status_layout.addWidget(self.fcm_last_notif)
+        
+        layout.addWidget(status_frame)
+        
+        # Controls section
+        controls_frame = QFrame()
+        controls_frame.setObjectName("card")
+        controls_layout = QVBoxLayout(controls_frame)
+        controls_layout.setContentsMargins(16, 16, 16, 16)
+        controls_layout.setSpacing(12)
+        
+        controls_header = QLabel("🎮 Controls")
+        controls_header.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        controls_header.setStyleSheet("color: #e6e6e6;")
+        controls_layout.addWidget(controls_header)
+        
+        # Mandatory keyword input
+        keyword_row = QHBoxLayout()
+        keyword_label = QLabel("Required Keyword:")
+        keyword_label.setStyleSheet("color: #d4d4d4; font-size: 10pt;")
+        keyword_row.addWidget(keyword_label)
+
+        self.fcm_keyword_input = QLineEdit()
+        self.fcm_keyword_input.setPlaceholderText("e.g. raid, alarm, base...")
+        self.fcm_keyword_input.setMinimumHeight(36)
+        self.fcm_keyword_input.setClearButtonEnabled(True)
+        self.fcm_keyword_input.setText(self.config.get("fcm_filter_keyword", ""))
+        self.fcm_keyword_input.textChanged.connect(self.on_fcm_keyword_change)
+        self.fcm_keyword_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                border: 1px solid #3e3e42;
+                border-radius: 8px;
+                padding: 6px 10px;
+                color: #d4d4d4;
+            }
+            QLineEdit:focus {
+                border-color: #dc3545;
+            }
+        """)
+        keyword_row.addWidget(self.fcm_keyword_input, 1)
+
+        required_hint = QLabel("✳️ Required: FCM mode only forwards alerts containing this keyword")
+        required_hint.setStyleSheet("color: #dc3545; font-size: 9pt;")
+        keyword_row.addWidget(required_hint)
+
+        controls_layout.addLayout(keyword_row)
+
+        # Authentication button
+        self.fcm_auth_btn = QPushButton("🔐 Authenticate with Steam")
+        self.fcm_auth_btn.setFont(QFont("Segoe UI", 11))
+        self.fcm_auth_btn.setMinimumHeight(42)
+        self.fcm_auth_btn.setStyleSheet(self.get_button_style("#0e639c"))
+        self.fcm_auth_btn.clicked.connect(self.on_fcm_authenticate)
+        controls_layout.addWidget(self.fcm_auth_btn)
+        
+        # Start/Stop buttons
+        button_row = QHBoxLayout()
+        
+        self.fcm_start_btn = QPushButton("▶️ Start FCM Mode")
+        self.fcm_start_btn.setFont(QFont("Segoe UI", 11))
+        self.fcm_start_btn.setMinimumHeight(42)
+        self.fcm_start_btn.setStyleSheet(self.get_button_style("#28a745"))
+        self.fcm_start_btn.clicked.connect(self.on_fcm_start)
+        self.fcm_start_btn.setEnabled(False)
+        button_row.addWidget(self.fcm_start_btn)
+        
+        self.fcm_stop_btn = QPushButton("⏹️ Stop FCM Mode")
+        self.fcm_stop_btn.setFont(QFont("Segoe UI", 11))
+        self.fcm_stop_btn.setMinimumHeight(42)
+        self.fcm_stop_btn.setStyleSheet(self.get_button_style("#dc3545"))
+        self.fcm_stop_btn.clicked.connect(self.on_fcm_stop)
+        self.fcm_stop_btn.setEnabled(False)
+        button_row.addWidget(self.fcm_stop_btn)
+        
+        controls_layout.addLayout(button_row)
+        
+        # Switch back to Telegram button
+        self.fcm_switch_telegram_btn = QPushButton("🔄 Switch to Telegram Mode")
+        self.fcm_switch_telegram_btn.setFont(QFont("Segoe UI", 11))
+        self.fcm_switch_telegram_btn.setMinimumHeight(42)
+        self.fcm_switch_telegram_btn.setStyleSheet(self.get_button_style("#6c42f5"))
+        self.fcm_switch_telegram_btn.clicked.connect(self.on_fcm_switch_to_telegram)
+        self.fcm_switch_telegram_btn.hide()
+        controls_layout.addWidget(self.fcm_switch_telegram_btn)
+        
+        layout.addWidget(controls_frame)
+        
+        # How it works section
+        info_frame = QFrame()
+        info_frame.setObjectName("card")
+        info_layout = QVBoxLayout(info_frame)
+        info_layout.setContentsMargins(16, 16, 16, 16)
+        info_layout.setSpacing(8)
+        
+        info_header = QLabel("💡 How It Works")
+        info_header.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        info_header.setStyleSheet("color: #e6e6e6;")
+        info_layout.addWidget(info_header)
+        
+        info_text = QLabel(
+            "<b>FCM Direct Mode:</b><br>"
+            "• Receives notifications directly from Rust+ companion app<br>"
+            "• No Telegram bot required<br>"
+            "• Uses Firebase Cloud Messaging (same as the official app)<br>"
+            "• Requires Node.js for initial setup<br>"
+            "<br>"
+            "<b>Setup Steps:</b><br>"
+            "1. Click 'Authenticate with Steam' and login<br>"
+            "2. Node.js will setup FCM credentials automatically<br>"
+            "3. Click 'Start FCM Mode' to begin listening<br>"
+            "4. Pair with your Rust+ server in-game<br>"
+            "<br>"
+            "<b>Requirements:</b><br>"
+            "• Node.js and npm installed on your system<br>"
+            "• Internet connection for authentication<br>"
+            "• Keyword filter works the same as Telegram mode"
+        )
+        info_text.setStyleSheet("color: #b8b8b8; font-size: 10pt; line-height: 1.4;")
+        info_text.setWordWrap(True)
+        info_layout.addWidget(info_text)
+        
+        layout.addWidget(info_frame)
+        
+        layout.addStretch()
+        
+        # Check initial auth status
+        QTimer.singleShot(500, self.update_fcm_ui_status)
+        
+        scroll.setWidget(widget)
+        return scroll
     
     def create_plugin_store_tab(self):
         """Create the plugin store tab with Store and Installed sub-tabs"""
@@ -1716,8 +2017,17 @@ class MainWindow(QMainWindow):
         store_btn.clicked.connect(lambda: self.switch_tab(3))
         tab_layout.addWidget(store_btn)
         
+        # Beta Features button
+        beta_btn = DraggableButton("🧪 Beta Features")
+        beta_btn.is_core_tab = True  # Beta tab shouldn't be draggable
+        beta_btn.setFont(QFont("Segoe UI", 10))
+        beta_btn.setMinimumHeight(38)
+        beta_btn.setStyleSheet(self.get_tab_button_style(False))
+        beta_btn.clicked.connect(lambda: self.switch_tab(4))
+        tab_layout.addWidget(beta_btn)
+        
         # Store tab buttons
-        self.tab_buttons = [core_btn, logs_btn, clan_btn, store_btn]
+        self.tab_buttons = [core_btn, logs_btn, clan_btn, store_btn, beta_btn]
         
         # Separator
         separator = QFrame()
@@ -1772,6 +2082,8 @@ class MainWindow(QMainWindow):
                 tab_idx = 2  # clan tab
             elif i == 3:
                 tab_idx = 3  # plugin store tab
+            elif i == 4:
+                tab_idx = 4  # beta tab
             else:
                 mapping = self.tab_button_map.get(str(id(btn)), {})
                 tab_idx = mapping.get('tab_index', i)
@@ -1795,8 +2107,8 @@ class MainWindow(QMainWindow):
         if source_idx is None or target_idx is None:
             return
 
-        # Don't allow reordering with fixed tabs (Core=0, Logs=1, Clan=2, Store=3)
-        if source_idx <= 3 or target_idx <= 3:
+        # Don't allow reordering with fixed tabs (Core=0, Logs=1, Clan=2, Store=3, Beta=4)
+        if source_idx <= 4 or target_idx <= 4:
             return
 
         source_btn = self.tab_buttons[source_idx]
@@ -2104,7 +2416,14 @@ class MainWindow(QMainWindow):
     
     def on_start_clicked(self):
         """Handle start button click - starts appropriate service based on mode"""
-        if self.config.get("relay_mode", False) and self.relay_client:
+        if self.config.get("fcm_mode", False):
+            # FCM mode - start FCM service
+            if not self.fcm_service.is_authenticated():
+                self.log("❌ Not authenticated. Please authenticate first in Beta tab.")
+                return
+            self.fcm_service.start()
+            self.log("🔄 Starting FCM service...")
+        elif self.config.get("relay_mode", False) and self.relay_client:
             # Relay mode - reconnect relay client
             self.relay_client.connect()
             self.log("🔄 Reconnecting to relay server...")
@@ -2114,7 +2433,11 @@ class MainWindow(QMainWindow):
     
     def on_stop_clicked(self):
         """Handle stop button click - stops appropriate service based on mode"""
-        if self.config.get("relay_mode", False) and self.relay_client:
+        if self.config.get("fcm_mode", False):
+            # FCM mode - stop FCM service
+            self.fcm_service.stop()
+            self.log("⏸ FCM service stopped")
+        elif self.config.get("relay_mode", False) and self.relay_client:
             # Relay mode - disconnect relay client
             self.relay_client.disconnect()
             self.log("⏸ Disconnected from relay server")
@@ -2151,6 +2474,261 @@ class MainWindow(QMainWindow):
         """Update keyword filter text"""
         self.config["filter_keyword"] = self.filter_input.text().strip()
         self.save_config()
+    
+    def on_fcm_notification(self, message):
+        """Handle incoming FCM notifications"""
+        self.log(f"📨 FCM notification received: {message[:50]}...")
+        
+        # Update last notification display
+        if hasattr(self, 'fcm_last_notif'):
+            self.fcm_last_notif.setText(f"Last: {message[:100]}")
+            self.fcm_last_notif.setStyleSheet("color: #00ff00; font-size: 9pt; padding: 8px; background-color: #1a1a1a; border-radius: 4px;")
+        
+        # Update notification count
+        if hasattr(self, 'fcm_notif_count'):
+            try:
+                count = int(self.fcm_notif_count.text()) + 1
+                self.fcm_notif_count.setText(str(count))
+            except:
+                self.fcm_notif_count.setText("1")
+
+        # Broadcast to relay server if enabled (same as Telegram)
+        if self.config.get("server_mode_enabled", False):
+            try:
+                self.relay_server.broadcast_message(message)
+            except Exception as e:
+                self.log(f"✗ Relay broadcast error: {str(e)}")
+        
+        # Notify all enabled plugins (same as Telegram)
+        for plugin in self.plugins:
+            try:
+                plugin_name = plugin.get_name()
+                if self.plugin_enabled.get(plugin_name, True):
+                    plugin.on_telegram_message(message)
+            except Exception as e:
+                self.log(f"✗ Plugin {plugin.get_name()} error: {str(e)}")
+    
+    def on_fcm_status(self, status, color):
+        """Update FCM status display"""
+        if hasattr(self, 'fcm_listener_status'):
+            self.fcm_listener_status.setText(status)
+            self.fcm_listener_status.setStyleSheet(f"color: {color}; padding: 4px 8px; background-color: #1a1a1a; border-radius: 4px; font-size: 10pt;")
+        
+        self.log(f"[FCM] {status}")
+    
+    def on_fcm_auth_completed(self, success, message):
+        """Handle FCM authentication completion"""
+        if success:
+            self.log(f"✓ FCM authentication successful!")
+            QMessageBox.information(self, "Authentication Complete", message)
+            self.update_fcm_ui_status()
+        else:
+            self.log(f"✗ FCM authentication failed: {message}")
+            QMessageBox.warning(self, "Authentication Failed", message)
+    
+    def on_fcm_authenticate(self):
+        """Start FCM authentication flow"""
+        # Show beta acknowledgment dialog on first use
+        if not self.config.get("fcm_beta_acknowledged", False):
+            from PySide6.QtWidgets import QMessageBox
+            result = QMessageBox.question(
+                self,
+                "Beta Feature",
+                "This is a beta feature that uses direct Rust+ notifications.\n\n"
+                "⚠️ This will:\n"
+                "• Open your browser for Steam login\n"
+                "• Use Node.js to setup FCM credentials\n"
+                "• Bypass Telegram completely when active\n\n"
+                "Would you like to proceed?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if result != QMessageBox.Yes:
+                return
+            
+            self.config["fcm_beta_acknowledged"] = True
+            self.save_config()
+        
+        self.log("Starting FCM authentication...")
+        self.fcm_service.start_auth_flow()
+    
+    def on_fcm_start(self):
+        """Start FCM mode"""
+        # Enforce mandatory keyword
+        keyword = (self.config.get("fcm_filter_keyword", "") or "").strip()
+        if not keyword:
+            QMessageBox.warning(
+                self,
+                "Keyword Required",
+                "Please set the required keyword in the Beta tab before starting FCM mode."
+            )
+            return
+        # Stop other services first
+        if self.telegram_service.isRunning():
+            self.telegram_service.stop()
+            self.log("Stopped Telegram service")
+        
+        if self.relay_client and self.relay_client.is_connected():
+            self.relay_client.disconnect()
+            self.log("Disconnected from relay server")
+        
+        # Set FCM mode in config
+        self.config["fcm_mode"] = True
+        self.config["relay_mode"] = False
+        self.save_config()
+        
+        # Start FCM service
+        self.fcm_service.start()
+        self.log("🧪 FCM mode started")
+        
+        # Update UI
+        self.fcm_start_btn.setEnabled(False)
+        self.fcm_stop_btn.setEnabled(True)
+        self.fcm_switch_telegram_btn.show()
+
+        # Update session timestamp
+        try:
+            import time as _time
+            ts = _time.strftime('%Y-%m-%d %H:%M:%S')
+            if hasattr(self, 'fcm_session_time'):
+                self.fcm_session_time.setText(f"Started at {ts}")
+                self.fcm_session_time.setStyleSheet("color: #00ff00; font-size: 9pt; font-weight: bold;")
+        except:
+            pass
+        
+        # Update connection mode status
+        self.update_connection_mode_status()
+    
+    def on_fcm_stop(self):
+        """Stop FCM mode"""
+        self.fcm_service.stop()
+        self.log("FCM mode stopped")
+        
+        # Update UI
+        self.fcm_start_btn.setEnabled(True)
+        self.fcm_stop_btn.setEnabled(False)
+
+        # Update session timestamp
+        try:
+            import time as _time
+            ts = _time.strftime('%Y-%m-%d %H:%M:%S')
+            if hasattr(self, 'fcm_session_time'):
+                self.fcm_session_time.setText(f"Stopped at {ts}")
+                self.fcm_session_time.setStyleSheet("color: #ffa500; font-size: 9pt; font-weight: bold;")
+        except:
+            pass
+    
+    def on_fcm_switch_to_telegram(self):
+        """Switch from FCM mode back to Telegram mode"""
+        from PySide6.QtWidgets import QMessageBox
+        result = QMessageBox.question(
+            self,
+            "Switch to Telegram Mode",
+            "This will stop FCM mode and switch back to Telegram.\n\n"
+            "Continue?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if result != QMessageBox.Yes:
+            return
+        
+        # Stop FCM
+        self.fcm_service.stop()
+        
+        # Clear FCM mode from config
+        self.config["fcm_mode"] = False
+        self.save_config()
+        
+        # Start Telegram
+        self.telegram_service.start()
+        
+        # Update UI
+        self.fcm_start_btn.setEnabled(True)
+        self.fcm_stop_btn.setEnabled(False)
+        self.fcm_switch_telegram_btn.hide()
+        
+        # Update connection mode status
+        self.update_connection_mode_status()
+        
+        self.log("Switched back to Telegram mode")
+    
+    def update_fcm_ui_status(self):
+        """Update FCM UI based on current authentication status"""
+        if hasattr(self, 'fcm_auth_status'):
+            if self.fcm_service.is_authenticated():
+                self.fcm_auth_status.setText("✓ Authenticated")
+                self.fcm_auth_status.setStyleSheet("color: #00ff00; font-size: 10pt; font-weight: bold;")
+                self.fcm_auth_btn.setText("🔄 Re-authenticate")
+                # Gate start by keyword presence
+                has_kw = bool((self.config.get("fcm_filter_keyword", "") or "").strip())
+                self.fcm_start_btn.setEnabled(has_kw)
+            else:
+                self.fcm_auth_status.setText("Not authenticated")
+                self.fcm_auth_status.setStyleSheet("color: #888888; font-size: 10pt;")
+                self.fcm_auth_btn.setText("🔐 Authenticate with Steam")
+                self.fcm_start_btn.setEnabled(False)
+        
+        # Update paired server display
+        if hasattr(self, 'fcm_paired_server'):
+            if self.fcm_service.is_paired():
+                server_info = f"{self.fcm_service.paired_server_name} ({self.fcm_service.paired_server_ip}:{self.fcm_service.paired_server_port})"
+                self.fcm_paired_server.setText(server_info)
+                self.fcm_paired_server.setStyleSheet("color: #00ff00; font-size: 10pt; font-weight: bold;")
+                self.fcm_disconnect_server_btn.show()
+            else:
+                self.fcm_paired_server.setText("Not paired")
+                self.fcm_paired_server.setStyleSheet("color: #888888; font-size: 10pt;")
+                self.fcm_disconnect_server_btn.hide()
+    
+    def on_fcm_keyword_change(self):
+        """Update mandatory FCM keyword and UI gating"""
+        kw = self.fcm_keyword_input.text().strip()
+        self.config["fcm_filter_keyword"] = kw
+        self.save_config()
+        # Update start button enable state
+        has_kw = bool(kw)
+        # Only enable if authenticated as well
+        if self.fcm_service.is_authenticated():
+            self.fcm_start_btn.setEnabled(has_kw)
+
+    def on_fcm_server_paired(self, server_name, server_address):
+        """Handle server pairing event"""
+        if server_name and server_address:
+            self.log(f"✓ Paired with server: {server_name} @ {server_address}")
+            self.update_fcm_ui_status()
+        else:
+            self.log("Server pairing removed")
+            self.update_fcm_ui_status()
+    
+    def on_fcm_disconnect_server(self):
+        """Disconnect from paired server"""
+        from PySide6.QtWidgets import QMessageBox
+        
+        if not self.fcm_service.is_paired():
+            return
+        
+        result = QMessageBox.question(
+            self,
+            "Disconnect Server",
+            f"Disconnect from {self.fcm_service.paired_server_name}?\n\n"
+            f"This will unpair the server. You'll need to pair again in-game to receive notifications from it.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if result == QMessageBox.Yes:
+            if self.fcm_service.delete_pairing():
+                self.log(f"Disconnected from {self.fcm_service.paired_server_name}")
+                QMessageBox.information(
+                    self,
+                    "Server Disconnected",
+                    "Server has been unpaired. Pair with a new server in-game to receive notifications."
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "Failed to disconnect server. Check logs for details."
+                )
     
     def on_server_mode_toggle(self, state):
         """Enable/disable relay server mode"""
@@ -2763,8 +3341,23 @@ class MainWindow(QMainWindow):
         """Update the connection mode status display"""
         if not hasattr(self, 'clan_mode_status'):
             return
+        
+        if self.config.get("fcm_mode", False):
+            # FCM mode
+            self.clan_mode_status.setText("🧪 FCM Direct Mode (Beta)")
+            self.clan_mode_status.setStyleSheet("color: #ffa500; padding: 8px; background-color: #1a1a1a; border-radius: 6px; font-size: 11pt;")
+            self.disconnect_relay_btn.hide()
             
-        if self.config.get("relay_mode", False) and self.config.get("relay_client_server"):
+            # Update Core tab title
+            if hasattr(self, 'core_title') and hasattr(self, 'core_subtitle'):
+                self.core_title.setText("FCM Listener")
+                self.core_subtitle.setText("Direct Rust+ notifications via Firebase Cloud Messaging")
+            
+            # Hide warning on Core tab
+            if hasattr(self, 'core_relay_warning'):
+                self.core_relay_warning.hide()
+                
+        elif self.config.get("relay_mode", False) and self.config.get("relay_client_server"):
             # Relay mode
             server_url = self.config.get("relay_client_server", "unknown")
             self.clan_mode_status.setText(f"🔹 Relay Mode - Connected to: {server_url}")

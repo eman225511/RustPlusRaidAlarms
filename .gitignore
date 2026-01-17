@@ -40,3 +40,7 @@ htmlcov/
 
 TestDist/
 release/
+rustplus_token.json
+rustplus.config.json
+seen_notifications.json
+fcm_pairing.json

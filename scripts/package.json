@@ -1,0 +1,11 @@
+{
+  "name": "rustplus-fcm-helper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@liamcottle/push-receiver": "*",
+    "axios": "^1.6.7",
+    "uuid": "^9.0.1"
+  }
+}

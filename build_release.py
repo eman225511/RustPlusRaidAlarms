@@ -13,6 +13,7 @@ ROOT_FILES = [
     "plugin_base.py",
     "relay_server.py",
     "telegram_service.py",
+    "fcm_service.py",
     "requirements.txt",
     "run.bat",
 ]
@@ -46,6 +47,16 @@ def copy_files():
             shutil.copy2(src, RELEASE_DIR / src.name)
         else:
             print(f"    ⚠ Skipping missing file: {src}")
+
+
+
+    # Copy scripts folder
+    scripts_src = ROOT / "scripts"
+    scripts_dst = RELEASE_DIR / "scripts"
+    if scripts_src.exists():
+        shutil.copytree(scripts_src, scripts_dst, dirs_exist_ok=True)
+    else:
+        print(f"    ⚠ Skipping missing folder: {scripts_src}")
 
     print("    ✓ Copy complete")
 
