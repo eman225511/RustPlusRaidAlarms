@@ -13,11 +13,45 @@ import requests
 from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 from flask import Flask, request
+import multiprocessing
+from datetime import datetime
 
 # Lazy imports to avoid errors if not installed
 FCMListener = None
 RustSocket = None
 ServerDetails = None
+
+def fcm_listener_worker(fcm_credentials):
+    """Module-level worker used as a multiprocessing target.
+    Runs the rustplus FCMListener and keeps the process alive.
+    """
+    def dbg(msg):
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [FCM worker][pid={os.getpid()}] {msg}")
+
+    try:
+        from rustplus import FCMListener
+        import time
+
+        def on_notification(obj, notification, data_message):
+            # Summarize notification for logs
+            try:
+                nid = None
+                if hasattr(data_message, 'data') and isinstance(data_message.data, dict):
+                    nid = data_message.data.get('persistent_id') or data_message.data.get('id')
+                dbg(f"Notification received nid={nid}")
+            except Exception as _:
+                dbg("Notification received (unable to summarize)")
+
+        dbg("Starting FCMListener")
+        listener = FCMListener(data={"fcm_credentials": fcm_credentials})
+        listener.on_notification = on_notification
+        listener.start(daemon=False)
+        dbg("FCMListener started; entering wait loop")
+        # Keep process alive while listener thread runs
+        while True:
+            time.sleep(1)
+    except Exception as exc:
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [FCM worker][pid={os.getpid()}] ERROR: {exc}")
 
 
 class FCMService(QThread):
@@ -28,6 +62,7 @@ class FCMService(QThread):
     
     message_received = Signal(str)  # Emitted when filtered notification arrives
     status_changed = Signal(str, str)  # status text, color
+    running_changed = Signal(bool)  # Emitted when listener starts/stops
     auth_completed = Signal(bool, str)  # success, message
     server_paired = Signal(str, str)  # server_name, server_ip:port
     
@@ -42,6 +77,7 @@ class FCMService(QThread):
         self.config = config
         self.running = False
         self.fcm_listener = None
+        self.fcm_listener_process = None
         self.auth_done = threading.Event()
         self.rustplus_token = None
         self.steam_id = None
@@ -59,9 +95,11 @@ class FCMService(QThread):
         self.load_credentials()
         self.load_seen_notifications()
         self.load_pairing()
+
+    # run_fcm_listener_subprocess removed — use module-level fcm_listener_worker
     
     def load_credentials(self):
-        """Load existing auth token and FCM credentials"""
+        """Load existing auth token, FCM credentials, and filter keyword"""
         try:
             # Load auth token
             if os.path.exists(self.TOKEN_FILE):
@@ -70,8 +108,7 @@ class FCMService(QThread):
                     self.rustplus_token = token_data.get("token")
                     self.steam_id = token_data.get("steam_id")
                     print(f"[FCM] Loaded auth token for Steam ID: {self.steam_id}")
-            
-            # Load FCM credentials
+            # Load FCM credentials and filter keyword
             if os.path.exists(self.CONFIG_FILE):
                 with open(self.CONFIG_FILE, "r", encoding="utf-8") as f:
                     config = json.load(f)
@@ -80,6 +117,10 @@ class FCMService(QThread):
                     cli_token = config.get("rustplus_auth_token")
                     if cli_token:
                         self.rustplus_token = cli_token
+                    # Load filter keyword if present
+                    filter_kw = config.get("fcm_filter_keyword")
+                    if filter_kw is not None:
+                        self.config["fcm_filter_keyword"] = filter_kw
                     print("[FCM] Loaded rustplus.js config")
         except Exception as e:
             print(f"[FCM] Error loading credentials: {e}")
@@ -266,30 +307,28 @@ class FCMService(QThread):
             print(f"[FCM] Auto-detected Steam ID: {self.steam_id}")
             self.auth_done.set()
             
-            return """
-            <h2>Rust+ authentication complete</h2>
-            <p>You can close this tab and return to the app.</p>
-            <script>setTimeout(() => window.close(), 2000);</script>
-            """
-    
-    def _run_flask_server(self):
-        """Run Flask server for OAuth callback"""
-        try:
-            # Suppress Flask logging
-            import logging
-            log = logging.getLogger('werkzeug')
-            log.setLevel(logging.ERROR)
-            
-            self.flask_app.run(port=self.CALLBACK_PORT, debug=False, use_reloader=False)
-        except Exception as e:
-            print(f"[FCM] Flask server error: {e}")
-    
-    def _setup_fcm_credentials(self):
-        """Setup FCM credentials using Node.js scripts"""
-        try:
-            # Try custom Node helper first
-            node_path = shutil.which("node")
-            if node_path:
+            try:
+                self.status_changed.emit("Starting FCM listener...", "#ffa500")
+                print("[FCM] Starting FCM listener (subprocess)...")
+                self.fcm_listener_process = multiprocessing.Process(
+                    target=fcm_listener_worker,
+                    args=(self.fcm_credentials,)
+                )
+                self.fcm_listener_process.start()
+                self.status_changed.emit("✓ FCM listener active", "#00ff00")
+                print("[FCM] FCM listener subprocess started and waiting for notifications...")
+                while self.running:
+                    time.sleep(1)
+            except Exception as e:
+                error_msg = str(e)
+                print(f"[FCM] Error: {error_msg}")
+                self.status_changed.emit(f"❌ Error: {error_msg[:50]}", "#ff4444")
+            finally:
+                self.running = False
+                if self.fcm_listener_process:
+                    if self.fcm_listener_process.is_alive():
+                        self.fcm_listener_process.terminate()
+                        self.fcm_listener_process.join(timeout=2)
                 try:
                     print("[FCM] Running custom FCM helper...")
                     scripts_dir = os.path.join(os.getcwd(), "scripts")
@@ -302,6 +341,9 @@ class FCMService(QThread):
                         subprocess.run([npm_path, "install"], cwd=scripts_dir, 
                                      capture_output=True, timeout=60)
                     
+                    # Locate node executable
+                    node_path = shutil.which("node") or "node"
+
                     # Run custom FCM setup
                     result = subprocess.run([
                         node_path,
@@ -339,10 +381,6 @@ class FCMService(QThread):
                     print(f"[FCM] CLI failed: {result.stderr.decode()}")
             
             print("[FCM] Node/npx not found; FCM setup failed.")
-            return False
-            
-        except Exception as e:
-            print(f"[FCM] Error running FCM setup: {e}")
             return False
     
     def _register_device_for_push(self):
@@ -419,17 +457,30 @@ class FCMService(QThread):
             self.running = False
             return
         
+        def dbg(msg):
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [FCM service] {msg}")
+
         try:
             self.status_changed.emit("Starting FCM listener...", "#ffa500")
-            print("[FCM] Starting FCM listener...")
+            dbg("Starting FCM listener (process mode)")
             
-            # Create FCM listener
-            self.fcm_listener = FCMListener(data={"fcm_credentials": self.fcm_credentials})
-            self.fcm_listener.on_notification = self._on_notification
-            self.fcm_listener.start(daemon=False)
-            
+            # Start FCM listener in a separate process for reliable shutdown
+            if self.fcm_credentials:
+                self.fcm_listener_process = multiprocessing.Process(
+                    target=fcm_listener_worker,
+                    args=(self.fcm_credentials,)
+                )
+                self.fcm_listener_process.start()
+                dbg(f"FCM listener subprocess started (pid={self.fcm_listener_process.pid})")
+                try:
+                    self.running_changed.emit(True)
+                except Exception:
+                    pass
+            else:
+                raise RuntimeError("No FCM credentials available")
+
             self.status_changed.emit("✓ FCM listener active", "#00ff00")
-            print("[FCM] FCM listener started and waiting for notifications...")
+            dbg("FCM listener started and waiting for notifications...")
             
             # Keep thread alive
             while self.running:
@@ -437,21 +488,26 @@ class FCMService(QThread):
             
         except Exception as e:
             error_msg = str(e)
-            print(f"[FCM] Error: {error_msg}")
+            dbg(f"Error: {error_msg}")
             self.status_changed.emit(f"❌ Error: {error_msg[:50]}", "#ff4444")
         finally:
             self.running = False
-            if self.fcm_listener:
-                try:
-                    # FCMListener doesn't have a stop method, just let it die with thread
-                    pass
-                except:
-                    pass
+            if self.fcm_listener_process:
+                if self.fcm_listener_process.is_alive():
+                    self.fcm_listener_process.terminate()
+                    self.fcm_listener_process.join(timeout=2)
+            try:
+                self.running_changed.emit(False)
+            except Exception:
+                pass
     
     def _on_notification(self, obj, notification, data_message):
         """Handle incoming FCM notification"""
         try:
-            print("\n[FCM] Notification Received")
+            def dbg(msg):
+                print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [FCM service] {msg}")
+
+            dbg("Notification Received")
             
             # Extract data from DataMessageStanza object
             data = {}
@@ -463,7 +519,7 @@ class FCMService(QThread):
             # Check for duplicate notifications
             notif_id = data.get("persistent_id") or data.get("id")
             if notif_id in self.seen_notifications:
-                print(f"[FCM] Ignoring already-seen notification: {notif_id}")
+                dbg(f"Ignoring already-seen notification: {notif_id}")
                 return
             
             if notif_id:
@@ -593,7 +649,7 @@ class FCMService(QThread):
                 "#00ff00"
             )
             
-            print(f"[FCM] Notification forwarded to plugins: {notification_text}")
+            dbg(f"Notification forwarded to plugins: {notification_text}")
             
         except Exception as e:
             print(f"[FCM] Notification handler error: {e}")
@@ -601,8 +657,44 @@ class FCMService(QThread):
             traceback.print_exc()
     
     def stop(self):
-        """Stop the FCM listener"""
-        print("[FCM] Stopping FCM listener...")
+        """Stop the FCM listener subprocess"""
+        def dbg(msg):
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [FCM service] {msg}")
+
+        dbg("Stopping FCM listener subprocess...")
         self.running = False
+        if self.fcm_listener_process and self.fcm_listener_process.is_alive():
+            pid = getattr(self.fcm_listener_process, 'pid', None)
+            self.fcm_listener_process.terminate()
+            self.fcm_listener_process.join(timeout=2)
+            if self.fcm_listener_process.is_alive():
+                print(f"[FCM] Subprocess did not exit; forcing kill (pid={pid})")
+                try:
+                    if os.name == 'nt' and pid:
+                        subprocess.run(["taskkill", "/F", "/PID", str(pid), "/T"], check=False)
+                    else:
+                        # POSIX fallback
+                        try:
+                            os.killpg(os.getpgid(pid), 9)
+                        except Exception:
+                            os.kill(pid, 9)
+                except Exception as kill_exc:
+                    print(f"[FCM] Failed to force-kill subprocess: {kill_exc}")
+            else:
+                dbg("FCM listener subprocess terminated.")
+            # Emit status update for UI
+            try:
+                self.status_changed.emit("● Offline", "#888888")
+            except Exception:
+                pass
+            # Clear reference
+            try:
+                self.fcm_listener_process = None
+            except Exception:
+                pass
+            try:
+                self.running_changed.emit(False)
+            except Exception:
+                pass
         if self.isRunning():
             self.wait(2000)  # Wait up to 2 seconds for thread to finish

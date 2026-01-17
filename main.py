@@ -109,6 +109,7 @@ class MainWindow(QMainWindow):
         self.fcm_service = FCMService(self.config)
         self.fcm_service.message_received.connect(self.on_fcm_notification)
         self.fcm_service.status_changed.connect(self.on_fcm_status)
+        self.fcm_service.running_changed.connect(self.on_fcm_running_changed)
         self.fcm_service.auth_completed.connect(self.on_fcm_auth_completed)
         self.fcm_service.server_paired.connect(self.on_fcm_server_paired)
         
@@ -2515,6 +2516,69 @@ class MainWindow(QMainWindow):
             self.fcm_listener_status.setStyleSheet(f"color: {color}; padding: 4px 8px; background-color: #1a1a1a; border-radius: 4px; font-size: 10pt;")
         
         self.log(f"[FCM] {status}")
+
+    def on_fcm_running_changed(self, running: bool):
+        """Update UI when FCM listener starts/stops."""
+        if running:
+            # Listener started
+            self.fcm_start_btn.setEnabled(False)
+            self.fcm_stop_btn.setEnabled(True)
+            try:
+                import time as _time
+                ts = _time.strftime('%Y-%m-%d %H:%M:%S')
+                if hasattr(self, 'fcm_session_time'):
+                    self.fcm_session_time.setText(f"Started at {ts}")
+                    self.fcm_session_time.setStyleSheet("color: #00ff00; font-size: 9pt; font-weight: bold;")
+            except Exception:
+                pass
+            self.fcm_switch_telegram_btn.show()
+            # Persist FCM mode and refresh core tab/status
+            try:
+                self.config["fcm_mode"] = True
+                self.save_config()
+                # If UI not fully constructed yet, schedule a delayed update
+                if not (hasattr(self, 'core_title') and hasattr(self, 'core_subtitle')):
+                    QTimer.singleShot(250, self.update_connection_mode_status)
+                    QTimer.singleShot(250, lambda: self.fcm_listener_status.setText("● Online") if hasattr(self, 'fcm_listener_status') else None)
+                    QTimer.singleShot(250, lambda: self.fcm_listener_status.setStyleSheet("color: #00ff00; padding: 4px 8px; background-color: #1a1a1a; border-radius: 4px; font-size: 10pt;") if hasattr(self, 'fcm_listener_status') else None)
+                else:
+                    self.update_connection_mode_status()
+                    if hasattr(self, 'fcm_listener_status'):
+                        self.fcm_listener_status.setText("● Online")
+                        self.fcm_listener_status.setStyleSheet("color: #00ff00; padding: 4px 8px; background-color: #1a1a1a; border-radius: 4px; font-size: 10pt;")
+            except Exception:
+                pass
+        else:
+            # Listener stopped
+            self.fcm_start_btn.setEnabled(True)
+            self.fcm_stop_btn.setEnabled(False)
+            try:
+                import time as _time
+                ts = _time.strftime('%Y-%m-%d %H:%M:%S')
+                if hasattr(self, 'fcm_session_time'):
+                    self.fcm_session_time.setText(f"Stopped at {ts}")
+                    self.fcm_session_time.setStyleSheet("color: #ffa500; font-size: 9pt; font-weight: bold;")
+            except Exception:
+                pass
+            try:
+                self.fcm_switch_telegram_btn.hide()
+            except Exception:
+                pass
+            # Persist FCM mode off and refresh core tab/status
+            try:
+                self.config["fcm_mode"] = False
+                self.save_config()
+                if not (hasattr(self, 'core_title') and hasattr(self, 'core_subtitle')):
+                    QTimer.singleShot(250, self.update_connection_mode_status)
+                    QTimer.singleShot(250, lambda: self.fcm_listener_status.setText("● Offline") if hasattr(self, 'fcm_listener_status') else None)
+                    QTimer.singleShot(250, lambda: self.fcm_listener_status.setStyleSheet("color: #888888; padding: 4px 8px; background-color: #1a1a1a; border-radius: 4px; font-size: 10pt;") if hasattr(self, 'fcm_listener_status') else None)
+                else:
+                    self.update_connection_mode_status()
+                    if hasattr(self, 'fcm_listener_status'):
+                        self.fcm_listener_status.setText("● Offline")
+                        self.fcm_listener_status.setStyleSheet("color: #888888; padding: 4px 8px; background-color: #1a1a1a; border-radius: 4px; font-size: 10pt;")
+            except Exception:
+                pass
     
     def on_fcm_auth_completed(self, success, message):
         """Handle FCM authentication completion"""
@@ -3858,6 +3922,14 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Handle application close"""
         print("[App] Closing application...")
+        # Stop FCM service if running
+        try:
+            self.fcm_service.stop()
+            if self.fcm_service.isRunning():
+                print("[App] Waiting for FCM service to stop...")
+                self.fcm_service.wait(3000)
+        except Exception:
+            pass
         self.telegram_service.stop()
         
         # Stop relay server if running
