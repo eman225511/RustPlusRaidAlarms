@@ -1,0 +1,173 @@
+/* Add this file as 'style.css' in your repo for improved styling */
+body {
+    font-family: 'Roboto', Arial, sans-serif;
+    background: #181a20;
+    color: #f5f6fa;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+body {
+    font-family: 'Roboto', Arial, sans-serif;
+    background: #181a20;
+    color: #f5f6fa;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+}
+header {
+    background: #23272f;
+    padding: 2rem 0 1rem 0;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+header h1 {
+    margin: 0;
+    font-size: 2.1rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+}
+.subtitle {
+    color: #bfc7d6;
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
+}
+main {
+    max-width: 700px;
+    margin: 3.5rem auto 2.5rem auto;
+    background: #23272f;
+    border-radius: 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.13);
+    padding: 2.8rem 2.2rem 2.8rem 2.2rem;
+}
+.hero-simple {
+    text-align: center;
+    margin-bottom: 2.8rem;
+    padding: 1.5rem 0 1.5rem 0;
+}
+.hero-simple h2 {
+    font-size: 1.5rem;
+    color: #ffb347;
+    margin-bottom: 0.5rem;
+}
+.hero-simple p {
+    color: #e6eaf3;
+    font-size: 1.05rem;
+    margin-bottom: 1.1rem;
+}
+.cta-row {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 1.2rem;
+}
+.download-btn {
+    display: inline-block;
+    background: linear-gradient(90deg, #4fc3f7 0%, #ffb347 100%);
+    color: #23272f;
+    font-weight: 700;
+    padding: 0.7rem 1.5rem;
+    border-radius: 8px;
+    font-size: 1.05rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.13);
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, transform 0.2s;
+    text-decoration: none;
+}
+.download-btn:hover {
+    background: linear-gradient(90deg, #ffb347 0%, #4fc3f7 100%);
+    color: #181a20;
+    transform: scale(1.05);
+}
+.secondary {
+    color: #4fc3f7;
+    padding: 0.6rem 1.1rem;
+    border-radius: 8px;
+    background: transparent;
+    border: 1px solid #4fc3f7;
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+    font-weight: 500;
+    margin-top: 0.5rem;
+    display: inline-block;
+}
+.secondary:hover {
+    background: #4fc3f7;
+    color: #23272f;
+}
+.meta {
+    color: #bfc7d6;
+    font-size: 0.97rem;
+}
+.features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 2.8rem 0 2.2rem 0;
+}
+.feature-card {
+    background: #23272f;
+    border: 1px solid #33374a;
+    border-radius: 14px;
+    padding: 1.5rem 1.2rem;
+    color: #f5f6fa;
+    font-size: 1.08rem;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+}
+.docs {
+    margin-top: 2.2rem;
+    text-align: center;
+}
+.docs h3 {
+    color: #ffb347;
+    margin-bottom: 0.7rem;
+}
+.docs ul {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1.2rem 0;
+}
+.docs ul li {
+    margin: 0.3rem 0;
+}
+.docs a {
+    color: #4fc3f7;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+.docs a:hover {
+    color: #ffb347;
+}
+.contact {
+    color: #bfc7d6;
+    font-size: 0.98rem;
+    margin-top: 0.7rem;
+}
+footer {
+    text-align: center;
+    padding: 1.2rem 0 0.7rem 0;
+    color: #888;
+    font-size: 0.95rem;
+}
+@media (max-width: 900px) {
+    main {
+        max-width: 98vw;
+        padding: 1.2rem 0.5rem 1.5rem 0.5rem;
+    }
+    .features {
+        grid-template-columns: 1fr;
+        gap: 1.1rem;
+    }
+    .hero-simple {
+        padding: 1.2rem 0 1.2rem 0;
+    }
+    header h1 {
+        font-size: 1.3rem;
+    }
+    .hero-simple h2 {
+        font-size: 1.2rem;
+    }
+}
+}
